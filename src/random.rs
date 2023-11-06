@@ -25,53 +25,76 @@ impl Random {
     ///
     /// Corresponds to [`init_genrand`](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L56-L70).
     pub fn from_u32(seed: u32) -> Self {
+        // See Knuth TAOCP Vol2. 3rd Ed. P.106 for multiplier.
+        const MULT: u32 = 1812433253;
         let mut state = [0; N];
         state[0] = seed;
         for i in 1..N {
-            // See Knuth TAOCP Vol2. 3rd Ed. P.106 for multiplier.
-            state[i] = 1812433253u32
-                .wrapping_mul(state[i - 1] ^ (state[i - 1] >> 30))
+            state[i] = (state[i - 1] ^ (state[i - 1] >> 30))
+                .wrapping_mul(MULT)
                 .wrapping_add(i as u32);
         }
-        Random { state, index: N }
+        Random::from_state(state)
+    }
+
+    /// Reverses [`Random::from_u32`].
+    pub fn unseed_u32(&self) -> Option<u32> {
+        const MULT_INV: u32 = 2520285293; // MULT * MULT_INV == 1
+        for i in (1..N).rev() {
+            let si = self.state[i].wrapping_sub(i as u32).wrapping_mul(MULT_INV);
+            if si != self.state[i - 1] ^ (self.state[i - 1] >> 30) {
+                return None;
+            }
+        }
+        Some(self.state[0])
     }
 
     /// Constructs a `Random`, initialized by a key array.
     ///
     /// Corresponds to [`init_by_array`](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L72-L99).
     pub fn from_array(key: &[u32]) -> Self {
+        const MULT1: u32 = 1664525;
+        const MULT2: u32 = 1566083941;
+
+        if key.is_empty() {
+            panic!("empty key");
+        }
         let mut state = Random::from_u32(19650218).state;
+
         let mut i = 1;
         let mut j = 0;
-        let mut k = key.len().max(N);
-        while k > 0 {
-            // Non-linear
-            state[i] = (state[i] ^ ((state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(1664525)))
+        for _ in 0..key.len().max(N) {
+            state[i] = (state[i] ^ (state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(MULT1))
                 .wrapping_add(key[j])
                 .wrapping_add(j as u32);
             i += 1;
-            j += 1;
             if i >= N {
                 state[0] = state[N - 1];
                 i = 1;
             }
+            j += 1;
             if j >= key.len() {
                 j = 0;
             }
-            k -= 1;
         }
-        for _ in (1..N).rev() {
-            // Non-linear
-            state[i] = (state[i]
-                ^ ((state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(1566083941)))
-            .wrapping_sub(i as u32);
+
+        for _ in 1..N {
+            state[i] = (state[i] ^ (state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(MULT2))
+                .wrapping_sub(i as u32);
             i += 1;
             if i >= N {
                 state[0] = state[N - 1];
                 i = 1;
             }
         }
+
         state[0] = 0x80000000; // MSB is 1, assuring non-zero initial array
+
+        Random::from_state(state)
+    }
+
+    #[inline]
+    pub const fn from_state(state: [u32; N]) -> Self {
         Random { state, index: N }
     }
 
@@ -140,6 +163,11 @@ impl Default for Random {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unseed_u32() {
+        assert_eq!(Random::from_u32(123).unseed_u32(), Some(123));
+    }
 
     #[test]
     fn next_u32() {
