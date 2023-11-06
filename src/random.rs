@@ -93,6 +93,34 @@ impl Random {
         Random::from_state(state)
     }
 
+    /// Constructs a `Random`, initialized by a single-element key array.
+    ///
+    /// Corresponds to [`init_by_array`](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L72-L99)
+    /// with an array of length 1.
+    pub fn from_array1(key: [u32; 1]) -> Self {
+        const MULT1: u32 = 1664525;
+        const MULT2: u32 = 1566083941;
+
+        let mut state = Random::from_u32(19650218).state;
+
+        for i in 1..N {
+            state[i] = (state[i] ^ (state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(MULT1))
+                .wrapping_add(key[0]);
+        }
+        state[1] = (state[1] ^ (state[N - 1] ^ (state[N - 1] >> 30)).wrapping_mul(MULT1))
+            .wrapping_add(key[0]);
+
+        for i in 2..N {
+            state[i] = (state[i] ^ (state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(MULT2))
+                .wrapping_sub(i as u32);
+        }
+        state[1] =
+            (state[1] ^ (state[N - 1] ^ (state[N - 1] >> 30)).wrapping_mul(MULT2)).wrapping_sub(1);
+        state[0] = 0x80000000;
+
+        Random::from_state(state)
+    }
+
     #[inline]
     pub const fn from_state(state: [u32; N]) -> Self {
         Random { state, index: N }
@@ -167,6 +195,11 @@ mod tests {
     #[test]
     fn unseed_u32() {
         assert_eq!(Random::from_u32(123).unseed_u32(), Some(123));
+    }
+
+    #[test]
+    fn from_array1() {
+        assert_eq!(Random::from_array1([123]), Random::from_array(&[123]));
     }
 
     #[test]
