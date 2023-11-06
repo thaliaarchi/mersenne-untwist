@@ -1,0 +1,12 @@
+[package]
+name = "mt19937-rust"
+version = "0.1.0"
+authors = ["Thalia Archibald"]
+edition = "2021"
+description = "MT19937 Mersenne Twister pseudorandom number generator"
+repository = "https://github.com/thaliaarchi/mt19937-rust"
+license = "BSD-3-Clause"
+keywords = ["mt19937", "mersenne-twister", "prng"]
+categories = ["algorithms"]
+
+[dependencies]
