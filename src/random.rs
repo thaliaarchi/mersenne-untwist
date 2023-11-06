@@ -126,6 +126,11 @@ impl Random {
         Random { state, index: N }
     }
 
+    #[inline]
+    pub const fn state(&self) -> &[u32; N] {
+        &self.state
+    }
+
     /// Generates a random 32-bit integer on the interval [0, 0xffffffff].
     ///
     /// Corresponds to [`genrand_int32`](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L101C1-L137).

@@ -10,3 +10,4 @@ keywords = ["mt19937", "mersenne-twister", "prng"]
 categories = ["algorithms"]
 
 [dependencies]
+z3 = "0.12"
