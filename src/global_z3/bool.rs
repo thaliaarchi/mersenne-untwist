@@ -1,9 +1,10 @@
 use std::ffi::CStr;
 use std::fmt::{self, Debug, Display, Formatter};
+use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 use z3_sys::{
     Z3_ast, Z3_ast_to_string, Z3_context, Z3_dec_ref, Z3_get_bool_value, Z3_inc_ref, Z3_mk_and,
-    Z3_mk_bool_sort, Z3_mk_const, Z3_mk_eq, Z3_mk_false, Z3_mk_iff, Z3_mk_ite, Z3_mk_or,
+    Z3_mk_bool_sort, Z3_mk_const, Z3_mk_eq, Z3_mk_false, Z3_mk_iff, Z3_mk_ite, Z3_mk_not, Z3_mk_or,
     Z3_mk_string_symbol, Z3_mk_true, Z3_model_eval, Z3_L_FALSE, Z3_L_TRUE, Z3_L_UNDEF,
 };
 
@@ -92,6 +93,11 @@ impl Bool {
     }
 
     #[inline]
+    pub fn xor(&self, rhs: &Bool) -> Bool {
+        !self.iff(rhs)
+    }
+
+    #[inline]
     pub fn equals(&self, rhs: &Bool) -> Bool {
         let ctx = ctx();
         Bool::wrap(ctx, unsafe { Z3_mk_eq(ctx, self.ast, rhs.ast) })
@@ -150,5 +156,67 @@ impl Debug for Bool {
 impl Display for Bool {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         Z3_fmt(f, self.ast, Z3_ast_to_string)
+    }
+}
+
+macro_rules! binop(($Op:ident, $op:ident, $func:ident) => {
+    impl $Op<Bool> for Bool {
+        type Output = Bool;
+
+        #[inline]
+        fn $op(self, rhs: Bool) -> Self::Output {
+            self.$func(&rhs)
+        }
+    }
+
+    impl $Op<&Bool> for Bool {
+        type Output = Bool;
+
+        #[inline]
+        fn $op(self, rhs: &Bool) -> Self::Output {
+            self.$func(rhs)
+        }
+    }
+
+    impl $Op<Bool> for &Bool {
+        type Output = Bool;
+
+        #[inline]
+        fn $op(self, rhs: Bool) -> Self::Output {
+            self.$func(&rhs)
+        }
+    }
+
+    impl $Op<&Bool> for &Bool {
+        type Output = Bool;
+
+        #[inline]
+        fn $op(self, rhs: &Bool) -> Self::Output {
+            self.$func(rhs)
+        }
+    }
+});
+
+binop!(BitAnd, bitand, and);
+binop!(BitOr, bitor, or);
+binop!(BitXor, bitxor, xor);
+
+impl Not for Bool {
+    type Output = Bool;
+
+    #[inline]
+    fn not(self) -> Self::Output {
+        let ctx = ctx();
+        Bool::wrap(ctx, unsafe { Z3_mk_not(ctx, self.ast) })
+    }
+}
+
+impl Not for &Bool {
+    type Output = Bool;
+
+    #[inline]
+    fn not(self) -> Self::Output {
+        let ctx = ctx();
+        Bool::wrap(ctx, unsafe { Z3_mk_not(ctx, self.ast) })
     }
 }
