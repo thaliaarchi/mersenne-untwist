@@ -120,6 +120,7 @@ name = "mt19937-rust"
 version = "0.1.0"
 dependencies = [
  "z3",
+ "z3-sys",
 ]
 
 [[package]]

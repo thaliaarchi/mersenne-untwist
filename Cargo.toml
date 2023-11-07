@@ -11,3 +11,4 @@ categories = ["algorithms"]
 
 [dependencies]
 z3 = "0.12"
+z3-sys = "0.8"
