@@ -1,4 +1,4 @@
-const N: usize = 624;
+pub(crate) const N: usize = 624;
 
 /// The state of MT19937.
 ///
@@ -7,9 +7,9 @@ const N: usize = 624;
 #[derive(Debug, PartialEq, Eq)]
 pub struct Random {
     /// The array for the state vector.
-    state: [u32; N],
+    pub(crate) state: [u32; N],
     /// In the range 1..=N.
-    index: usize,
+    pub(crate) index: usize,
 }
 
 impl Random {
@@ -35,18 +35,6 @@ impl Random {
                 .wrapping_add(i as u32);
         }
         Random::from_state(state)
-    }
-
-    /// Reverses [`Random::from_u32`].
-    pub fn unseed_u32(&self) -> Option<u32> {
-        const MULT_INV: u32 = 2520285293; // MULT * MULT_INV == 1
-        for i in (1..N).rev() {
-            let si = self.state[i].wrapping_sub(i as u32).wrapping_mul(MULT_INV);
-            if si != self.state[i - 1] ^ (self.state[i - 1] >> 30) {
-                return None;
-            }
-        }
-        Some(self.state[0])
     }
 
     /// Constructs a `Random`, initialized by a key array.
@@ -131,10 +119,7 @@ impl Random {
         &self.state
     }
 
-    /// Generates a random 32-bit integer on the interval [0, 0xffffffff].
-    ///
-    /// Corresponds to [`genrand_int32`](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L101C1-L137).
-    pub fn next_u32(&mut self) -> u32 {
+    fn fill(&mut self) {
         const M: usize = 397;
         /// Constant vector `a`.
         const MATRIX_A: u32 = 0x9908b0df;
@@ -145,10 +130,9 @@ impl Random {
         // MAG01[x] = x * MATRIX_A, for x = 0 and 1
         const MAG01: [u32; 2] = [0x0, MATRIX_A];
 
-        let state = &mut self.state;
-
         // Generate N words at one time
         if self.index == N {
+            let state = &mut self.state;
             for k in 0..N - M {
                 let y = (state[k] & UPPER_MASK) | (state[k + 1] & LOWER_MASK);
                 state[k] = state[k + M] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
@@ -162,16 +146,15 @@ impl Random {
 
             self.index = 0;
         }
+    }
 
-        let mut y = state[self.index];
+    /// Generates a random 32-bit integer on the interval [0, 0xffffffff].
+    ///
+    /// Corresponds to [`genrand_int32`](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L101C1-L137).
+    pub fn next_u32(&mut self) -> u32 {
+        self.fill();
         self.index += 1;
-
-        // Tempering
-        y ^= y >> 11;
-        y ^= (y << 7) & 0x9d2c5680;
-        y ^= (y << 15) & 0xefc60000;
-        y ^= y >> 18;
-        y
+        temper(self.state[self.index - 1])
     }
 
     /// Generates a random floating-point number on the interval [0, 1), with
@@ -193,14 +176,17 @@ impl Default for Random {
     }
 }
 
+pub fn temper(mut x: u32) -> u32 {
+    x ^= x >> 11;
+    x ^= (x << 7) & 0x9d2c5680;
+    x ^= (x << 15) & 0xefc60000;
+    x ^= x >> 18;
+    x
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn unseed_u32() {
-        assert_eq!(Random::from_u32(123).unseed_u32(), Some(123));
-    }
 
     #[test]
     fn from_array1() {

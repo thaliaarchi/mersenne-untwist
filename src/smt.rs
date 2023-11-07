@@ -3,9 +3,7 @@ use z3::{
     Context,
 };
 
-use crate::Random;
-
-const N: usize = 624;
+use crate::{Random, N};
 
 pub struct AbstractRandom<'ctx> {
     ctx: &'ctx Context,
