@@ -9,7 +9,7 @@ use z3_sys::{
     Z3_ast, Z3_ast_to_string, Z3_context, Z3_dec_ref, Z3_get_numeral_uint64, Z3_inc_ref,
     Z3_mk_bv_sort, Z3_mk_bvadd, Z3_mk_bvand, Z3_mk_bvlshr, Z3_mk_bvmul, Z3_mk_bvneg, Z3_mk_bvnot,
     Z3_mk_bvor, Z3_mk_bvshl, Z3_mk_bvsub, Z3_mk_bvudiv, Z3_mk_bvurem, Z3_mk_bvxor, Z3_mk_const,
-    Z3_mk_eq, Z3_mk_string_symbol, Z3_mk_unsigned_int64, Z3_model_eval,
+    Z3_mk_eq, Z3_mk_ite, Z3_mk_string_symbol, Z3_mk_unsigned_int64, Z3_model_eval, Z3_simplify,
 };
 
 use crate::global_z3::{ctx, Bool, Model, Z3_fmt};
@@ -56,6 +56,13 @@ impl U32 {
     }
 
     #[inline]
+    pub fn ite(b_if: &Bool, v_then: &U32, v_else: &U32) -> U32 {
+        let ctx = ctx();
+        let ast = unsafe { Z3_mk_ite(ctx, b_if.ast, v_then.ast, v_else.ast) };
+        U32::wrap(ctx, ast)
+    }
+
+    #[inline]
     pub fn as_const(&self) -> Option<u32> {
         let mut tmp = 0;
         if unsafe { Z3_get_numeral_uint64(ctx(), self.ast, &mut tmp) } {
@@ -74,6 +81,12 @@ impl U32 {
         } else {
             None
         }
+    }
+
+    #[inline]
+    pub fn simplify(&self) -> Self {
+        let ctx = ctx();
+        Self::wrap(ctx, unsafe { Z3_simplify(ctx, self.ast) })
     }
 }
 

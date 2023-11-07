@@ -73,16 +73,16 @@ impl Z3Random {
         let state = &mut self.state;
         for k in 0..N - M {
             let y = (&state[k] & upper_mask) | (&state[k + 1] & lower_mask);
-            let mag = (&y & one).equals(zero).ite(zero, matrix_a);
+            let mag = U32::ite(&(&y & one).equals(zero), zero, matrix_a);
             state[k] = &state[k + M] ^ (y >> one) ^ mag;
         }
         for k in N - M..N - 1 {
             let y = (&state[k] & upper_mask) | (&state[k + 1] & lower_mask);
-            let mag = (&y & one).equals(zero).ite(zero, matrix_a);
+            let mag = U32::ite(&(&y & one).equals(zero), zero, matrix_a);
             state[k] = &state[k - (N - M)] ^ (y >> one) ^ mag;
         }
         let y = (&state[N - 1] & upper_mask) | (&state[0] & lower_mask);
-        let mag = (&y & one).equals(zero).ite(zero, matrix_a);
+        let mag = U32::ite(&(&y & one).equals(zero), zero, matrix_a);
         state[N - 1] = &state[M - 1] ^ (y >> one) ^ mag;
     }
 

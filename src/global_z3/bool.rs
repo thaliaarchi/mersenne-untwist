@@ -5,10 +5,10 @@ use std::ops::{BitAnd, BitOr, BitXor, Not};
 use z3_sys::{
     Z3_ast, Z3_ast_to_string, Z3_context, Z3_dec_ref, Z3_get_bool_value, Z3_inc_ref, Z3_mk_and,
     Z3_mk_bool_sort, Z3_mk_const, Z3_mk_eq, Z3_mk_false, Z3_mk_iff, Z3_mk_ite, Z3_mk_not, Z3_mk_or,
-    Z3_mk_string_symbol, Z3_mk_true, Z3_model_eval, Z3_L_FALSE, Z3_L_TRUE, Z3_L_UNDEF,
+    Z3_mk_string_symbol, Z3_mk_true, Z3_model_eval, Z3_simplify, Z3_L_FALSE, Z3_L_TRUE, Z3_L_UNDEF,
 };
 
-use crate::global_z3::{ctx, Model, Z3_fmt, U32};
+use crate::global_z3::{ctx, Model, Z3_fmt};
 
 /// A version of [`z3::ast::Bool`], that uses a thread-local context.
 pub struct Bool {
@@ -79,10 +79,10 @@ impl Bool {
     }
 
     #[inline]
-    pub fn ite(&self, v_then: &U32, v_else: &U32) -> U32 {
+    pub fn ite(b_if: &Bool, b_then: &Bool, b_else: &Bool) -> Bool {
         let ctx = ctx();
-        let ast = unsafe { Z3_mk_ite(ctx, self.ast, v_then.ast, v_else.ast) };
-        U32::wrap(ctx, ast)
+        let ast = unsafe { Z3_mk_ite(ctx, b_if.ast, b_then.ast, b_else.ast) };
+        Bool::wrap(ctx, ast)
     }
 
     #[inline]
@@ -122,6 +122,12 @@ impl Bool {
         } else {
             None
         }
+    }
+
+    #[inline]
+    pub fn simplify(&self) -> Self {
+        let ctx = ctx();
+        Self::wrap(ctx, unsafe { Z3_simplify(ctx, self.ast) })
     }
 }
 
