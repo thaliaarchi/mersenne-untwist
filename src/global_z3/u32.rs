@@ -1,21 +1,22 @@
 use std::ffi::CStr;
+use std::fmt::{self, Debug, Display, Formatter};
 use std::ops::{
     Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign,
     Mul, MulAssign, Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
 };
 
 use z3_sys::{
-    Z3_ast, Z3_context, Z3_dec_ref, Z3_inc_ref, Z3_mk_bv_sort, Z3_mk_bvadd, Z3_mk_bvand,
-    Z3_mk_bvlshr, Z3_mk_bvmul, Z3_mk_bvneg, Z3_mk_bvnot, Z3_mk_bvor, Z3_mk_bvshl, Z3_mk_bvsub,
-    Z3_mk_bvudiv, Z3_mk_bvurem, Z3_mk_bvxor, Z3_mk_const, Z3_mk_string_symbol,
-    Z3_mk_unsigned_int64,
+    Z3_ast, Z3_ast_to_string, Z3_context, Z3_dec_ref, Z3_get_numeral_uint64, Z3_inc_ref,
+    Z3_mk_bv_sort, Z3_mk_bvadd, Z3_mk_bvand, Z3_mk_bvlshr, Z3_mk_bvmul, Z3_mk_bvneg, Z3_mk_bvnot,
+    Z3_mk_bvor, Z3_mk_bvshl, Z3_mk_bvsub, Z3_mk_bvudiv, Z3_mk_bvurem, Z3_mk_bvxor, Z3_mk_const,
+    Z3_mk_eq, Z3_mk_string_symbol, Z3_mk_unsigned_int64, Z3_model_eval,
 };
 
-use crate::global_z3::ctx;
+use crate::global_z3::{ctx, Bool, Model, Z3_fmt};
 
 /// A version of [`z3::ast::BV`] with size 32, that uses a thread-local context.
 pub struct U32 {
-    ast: Z3_ast,
+    pub(super) ast: Z3_ast,
 }
 
 impl U32 {
@@ -43,11 +44,36 @@ impl U32 {
     }
 
     #[inline]
-    fn wrap(ctx: Z3_context, ast: Z3_ast) -> Self {
-        unsafe {
-            Z3_inc_ref(ctx, ast);
-        }
+    pub(super) fn wrap(ctx: Z3_context, ast: Z3_ast) -> Self {
+        unsafe { Z3_inc_ref(ctx, ast) };
         U32 { ast }
+    }
+
+    #[inline]
+    pub fn equals(&self, rhs: &U32) -> Bool {
+        let ctx = ctx();
+        Bool::wrap(ctx, unsafe { Z3_mk_eq(ctx, self.ast, rhs.ast) })
+    }
+
+    #[inline]
+    pub fn as_const(&self) -> Option<u32> {
+        let mut tmp = 0;
+        if unsafe { Z3_get_numeral_uint64(ctx(), self.ast, &mut tmp) } {
+            Some(tmp.try_into().unwrap())
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn eval(&self, model: &Model, model_completion: bool) -> Option<U32> {
+        let ctx = ctx();
+        let mut out: Z3_ast = self.ast;
+        if unsafe { Z3_model_eval(ctx, model.model, self.ast, model_completion, &mut out) } {
+            Some(Self::wrap(ctx, out))
+        } else {
+            None
+        }
     }
 }
 
@@ -69,9 +95,19 @@ impl Clone for U32 {
 impl Drop for U32 {
     #[inline]
     fn drop(&mut self) {
-        unsafe {
-            Z3_dec_ref(ctx(), self.ast);
-        }
+        unsafe { Z3_dec_ref(ctx(), self.ast) };
+    }
+}
+
+impl Debug for U32 {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+impl Display for U32 {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        Z3_fmt(f, self.ast, Z3_ast_to_string)
     }
 }
 
