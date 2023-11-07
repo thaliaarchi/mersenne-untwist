@@ -121,40 +121,40 @@ impl Random {
 
     fn fill(&mut self) {
         const M: usize = 397;
-        /// Constant vector `a`.
         const MATRIX_A: u32 = 0x9908b0df;
-        /// Most-significant `w-r` bits.
-        const UPPER_MASK: u32 = 0x80000000;
-        /// Least-significant `r` bits.
-        const LOWER_MASK: u32 = 0x7fffffff;
-        // MAG01[x] = x * MATRIX_A, for x = 0 and 1
-        const MAG01: [u32; 2] = [0x0, MATRIX_A];
 
         // Generate N words at one time
-        if self.index == N {
-            let state = &mut self.state;
-            for k in 0..N - M {
-                let y = (state[k] & UPPER_MASK) | (state[k + 1] & LOWER_MASK);
-                state[k] = state[k + M] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
-            }
-            for k in N - M..N - 1 {
-                let y = (state[k] & UPPER_MASK) | (state[k + 1] & LOWER_MASK);
-                state[k] = state[k - (N - M)] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
-            }
-            let y = (state[N - 1] & UPPER_MASK) | (state[0] & LOWER_MASK);
-            state[N - 1] = state[M - 1] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
-
-            self.index = 0;
+        let state = &mut self.state;
+        for k in 0..N - M {
+            let y = (state[k] & 0x80000000) | (state[k + 1] & 0x7fffffff);
+            state[k] = state[k + M] ^ (y >> 1) ^ ((y & 0x1) * MATRIX_A);
         }
+        for k in N - M..N - 1 {
+            let y = (state[k] & 0x80000000) | (state[k + 1] & 0x7fffffff);
+            state[k] = state[k - (N - M)] ^ (y >> 1) ^ ((y & 0x1) * MATRIX_A);
+        }
+        let y = (state[N - 1] & 0x80000000) | (state[0] & 0x7fffffff);
+        state[N - 1] = state[M - 1] ^ (y >> 1) ^ ((y & 0x1) * MATRIX_A);
+    }
+
+    pub fn temper(mut x: u32) -> u32 {
+        x ^= x >> 11;
+        x ^= (x << 7) & 0x9d2c5680;
+        x ^= (x << 15) & 0xefc60000;
+        x ^= x >> 18;
+        x
     }
 
     /// Generates a random 32-bit integer on the interval [0, 0xffffffff].
     ///
     /// Corresponds to [`genrand_int32`](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L101C1-L137).
     pub fn next_u32(&mut self) -> u32 {
-        self.fill();
+        if self.index == N {
+            self.fill();
+            self.index = 0;
+        }
         self.index += 1;
-        temper(self.state[self.index - 1])
+        Random::temper(self.state[self.index - 1])
     }
 
     /// Generates a random floating-point number on the interval [0, 1), with
@@ -174,14 +174,6 @@ impl Default for Random {
     fn default() -> Self {
         Random::new()
     }
-}
-
-pub fn temper(mut x: u32) -> u32 {
-    x ^= x >> 11;
-    x ^= (x << 7) & 0x9d2c5680;
-    x ^= (x << 15) & 0xefc60000;
-    x ^= x >> 18;
-    x
 }
 
 #[cfg(test)]
