@@ -126,15 +126,15 @@ impl Random {
         // Generate N words at one time
         let state = &mut self.state;
         for k in 0..N - M {
-            let y = (state[k] & 0x80000000) | (state[k + 1] & 0x7fffffff);
-            state[k] = state[k + M] ^ (y >> 1) ^ ((y & 0x1) * MATRIX_A);
+            let y = (state[k] & 0x80000000) | (state[k + 1] & 0x7ffffffe);
+            state[k] = state[k + M] ^ (y >> 1) ^ ((state[k + 1] & 0x1) * MATRIX_A);
         }
         for k in N - M..N - 1 {
-            let y = (state[k] & 0x80000000) | (state[k + 1] & 0x7fffffff);
-            state[k] = state[k - (N - M)] ^ (y >> 1) ^ ((y & 0x1) * MATRIX_A);
+            let y = (state[k] & 0x80000000) | (state[k + 1] & 0x7ffffffe);
+            state[k] = state[k - (N - M)] ^ (y >> 1) ^ ((state[k + 1] & 0x1) * MATRIX_A);
         }
-        let y = (state[N - 1] & 0x80000000) | (state[0] & 0x7fffffff);
-        state[N - 1] = state[M - 1] ^ (y >> 1) ^ ((y & 0x1) * MATRIX_A);
+        let y = (state[N - 1] & 0x80000000) | (state[0] & 0x7ffffffe);
+        state[N - 1] = state[M - 1] ^ (y >> 1) ^ ((state[0] & 0x1) * MATRIX_A);
     }
 
     pub fn temper(mut x: u32) -> u32 {
