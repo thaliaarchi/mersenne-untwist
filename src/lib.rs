@@ -8,6 +8,7 @@ pub mod global_z3;
 mod random;
 mod reverse;
 mod smt;
+pub mod symbolic;
 
 pub use random::*;
 pub use reverse::*;
