@@ -62,27 +62,27 @@ impl Z3Random {
         &self.state
     }
 
-    fn fill(&mut self) {
+    fn twist(&mut self) {
         const M: usize = 397;
         let matrix_a = &U32::from(0x9908b0df);
         let upper_mask = &U32::from(0x80000000);
-        let lower_mask = &U32::from(0x7fffffff);
+        let lower_mask = &U32::from(0x7ffffffe);
         let zero = &U32::from(0);
         let one = &U32::from(1);
 
         let state = &mut self.state;
         for k in 0..N - M {
             let y = (&state[k] & upper_mask) | (&state[k + 1] & lower_mask);
-            let mag = U32::ite(&(&y & one).equals(zero), zero, matrix_a);
+            let mag = U32::ite(&(&state[k + 1] & one).equals(zero), zero, matrix_a);
             state[k] = &state[k + M] ^ (y >> one) ^ mag;
         }
         for k in N - M..N - 1 {
             let y = (&state[k] & upper_mask) | (&state[k + 1] & lower_mask);
-            let mag = U32::ite(&(&y & one).equals(zero), zero, matrix_a);
+            let mag = U32::ite(&(&state[k + 1] & one).equals(zero), zero, matrix_a);
             state[k] = &state[k - (N - M)] ^ (y >> one) ^ mag;
         }
         let y = (&state[N - 1] & upper_mask) | (&state[0] & lower_mask);
-        let mag = U32::ite(&(&y & one).equals(zero), zero, matrix_a);
+        let mag = U32::ite(&(&state[0] & one).equals(zero), zero, matrix_a);
         state[N - 1] = &state[M - 1] ^ (y >> one) ^ mag;
     }
 
@@ -113,7 +113,7 @@ impl Z3Random {
 
     pub fn next_u32(&mut self) -> U32 {
         if self.index == N {
-            self.fill();
+            self.twist();
             self.index = 0;
         }
         let y = self.state[self.index].clone();
@@ -160,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn fill() {
+    fn twist() {
         let state = (0..N)
             .map(|i| {
                 let s = format!("s{i}\0");
@@ -168,7 +168,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
         let mut z3rand = Z3Random::from_state(state.try_into().unwrap());
-        z3rand.fill();
+        z3rand.twist();
         for (i, x) in z3rand.state().iter().enumerate() {
             println!("state[{i}] = {x}");
         }

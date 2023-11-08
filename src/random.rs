@@ -119,7 +119,7 @@ impl Random {
         &self.state
     }
 
-    fn fill(&mut self) {
+    fn twist(&mut self) {
         const M: usize = 397;
         const MATRIX_A: u32 = 0x9908b0df;
 
@@ -150,7 +150,7 @@ impl Random {
     /// Corresponds to [`genrand_int32`](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L101C1-L137).
     pub fn next_u32(&mut self) -> u32 {
         if self.index == N {
-            self.fill();
+            self.twist();
             self.index = 0;
         }
         self.index += 1;
