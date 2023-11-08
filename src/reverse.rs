@@ -17,7 +17,9 @@ impl Random {
     pub fn untwist_verify(state0: &[u32; N], state1: &[u32; N]) {
         const M: usize = 397;
 
-        // Solving for bit 31 of state0[N - 1]:
+        let mut state0 = PartialState::new(*state0);
+
+        // (1) Solving for bit 31 of state0[N - 1]:
         //
         // s1[623] == s1[396] ^ ((s0[623] & 0x80000000) >> 1) ^ ((s1[0] & 0x7ffffffe) >> 1) ^ ((s1[0] & 0x1) * 0x9908b0df)
         // s1[623] & 0x40000000 == (s1[396] ^ ((s0[623] & 0x80000000) >> 1) ^ ((s1[0] & 0x7ffffffe) >> 1) ^ ((s1[0] & 0x1) * 0x9908b0df)) & 0x40000000
@@ -25,13 +27,10 @@ impl Random {
         // s1[623] & 0x40000000 == (s1[396] ^ (s0[623] >> 1)) & 0x40000000
         // (s0[623] >> 1) & 0x40000000 == (s1[396] ^ s1[623]) & 0x40000000
         // s0[623] & 0x80000000 == ((s1[396] ^ s1[623]) << 1) & 0x80000000
-        assert_eq!(
-            state0[N - 1] & 0x80000000,
-            ((state1[M - 1] ^ state1[N - 1]) << 1) & 0x80000000,
-        );
+        state0.set(N - 1, (state1[M - 1] ^ state1[N - 1]) << 1, 0x80000000);
 
         for i in N - M..N - 1 {
-            // Solving for bit 0 of state0[i + 1]:
+            // (2) Solving for bit 0 of state0[i + 1]:
             //
             // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
             // s1[i] & 0x80000000 == (s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x80000000
@@ -39,12 +38,9 @@ impl Random {
             // s1[i] & 0x80000000 == (s1[i-(N-M)] ^ (s0[i+1] << 31)) & 0x80000000
             // (s0[i+1] << 31) & 0x80000000 == (s1[i-(N-M)] ^ s1[i]) & 0x80000000
             // s0[i+1] & 0x1 == ((s1[i-(N-M)] ^ s1[i]) >> 31) & 0x1
-            assert_eq!(
-                state0[i + 1] & 0x1,
-                ((state1[i - (N - M)] ^ state1[i]) >> 31) & 0x1,
-            );
+            state0.set(i + 1, (state1[i - (N - M)] ^ state1[i]) >> 31, 0x1);
 
-            // Solving for bit 31 of state0[i]:
+            // (3) Solving for bit 31 of state0[i]:
             //
             // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
             // s1[i] & 0x40000000 == (s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x40000000
@@ -52,12 +48,9 @@ impl Random {
             // s1[i] & 0x40000000 == (s1[i-(N-M)] ^ (s0[i] >> 1)) & 0x40000000
             // (s0[i] >> 1) & 0x40000000 == (s1[i-(N-M)] ^ s1[i]) & 0x40000000
             // s0[i] & 0x80000000 == ((s1[i-(N-M)] ^ s1[i]) << 1) & 0x80000000
-            assert_eq!(
-                state0[i] & 0x80000000,
-                ((state1[i - (N - M)] ^ state1[i]) << 1) & 0x80000000,
-            );
+            state0.set(i, (state1[i - (N - M)] ^ state1[i]) << 1, 0x80000000);
 
-            // Solving for bits 6, 9–12, 15, 17–19, 21–24, 26–27, and 30 of
+            // (4) Solving for bits 6, 9–12, 15, 17–19, 21–24, 26–27, and 30 of
             // state0[i + 1]. The mask 0x26f74f20 is !0x9908b0df & !0x40000000,
             // that is, the zero bits of the magnitude constant, excluding bit
             // 30 which is handled above.
@@ -68,10 +61,7 @@ impl Random {
             // s1[i] & 0x26f74f20 == (s1[i-(N-M)] ^ (s0[i+1] >> 1)) & 0x26f74f20
             // (s0[i+1] >> 1) & 0x26f74f20 == (s1[i-(N-M)] ^ s1[i]) & 0x26f74f20
             // s0[i+1] & 0x4dee9e40 == ((s1[i-(N-M)] ^ s1[i]) << 1) & 0x4dee9e40
-            assert_eq!(
-                state0[i + 1] & 0x4dee9e40,
-                ((state1[i - (N - M)] ^ state1[i]) << 1) & 0x4dee9e40,
-            );
+            state0.set(i + 1, (state1[i - (N - M)] ^ state1[i]) << 1, 0x4dee9e40);
         }
     }
 
@@ -160,6 +150,35 @@ impl Random {
             | (x29 ^ x14) << 29
             | (x30 ^ x15) << 30
             | (x31 ^ x2 ^ x9 ^ x16 ^ x17 ^ x20 ^ x24 ^ x27) << 31
+    }
+}
+
+struct PartialState {
+    values: [u32; N],
+    masks: [u32; N],
+    verify: [u32; N],
+}
+
+impl PartialState {
+    fn new(verify: [u32; N]) -> Self {
+        PartialState {
+            values: [0; N],
+            masks: [0; N],
+            verify,
+        }
+    }
+
+    #[allow(dead_code)]
+    fn get(&mut self, i: usize, mask: u32) -> u32 {
+        assert!(self.masks[i] & mask == mask);
+        self.values[i] & mask
+    }
+
+    fn set(&mut self, i: usize, value: u32, mask: u32) {
+        assert!(self.masks[i] & mask == 0);
+        assert_eq!(value & mask, self.verify[i] & mask);
+        self.values[i] |= value & mask;
+        self.masks[i] |= mask;
     }
 }
 
