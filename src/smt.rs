@@ -1,5 +1,6 @@
 use crate::{global_z3::U32, Random, N};
 
+#[derive(Debug, Clone)]
 pub struct Z3Random {
     state: Box<[U32; N]>,
     index: usize,
@@ -14,7 +15,7 @@ impl Z3Random {
         for i in 1..N {
             let prev = &state[i - 1];
             let v = (prev ^ (prev >> shift)) * mult + U32::from(i as u32);
-            state.push(v)
+            state.push(v.simplify())
         }
         let state = state.try_into().unwrap();
         Z3Random::from_state(state)
@@ -38,17 +39,18 @@ impl Z3Random {
 
         for i in 1..N {
             let prev = &state[i - 1];
-            state[i] = (&state[i] ^ ((prev ^ (prev >> shift)) * mult1)) + key0;
+            state[i] = ((&state[i] ^ ((prev ^ (prev >> shift)) * mult1)) + key0).simplify();
         }
         let last = &state[N - 1];
-        state[1] = (&state[1] ^ ((last ^ (last >> shift)) * mult1)) + key0;
+        state[1] = ((&state[1] ^ ((last ^ (last >> shift)) * mult1)) + key0).simplify();
 
         for i in 2..N {
             let prev = &state[i - 1];
-            state[i] = (&state[i] ^ ((prev ^ (prev >> shift)) * mult2)) - U32::from(i as u32);
+            state[i] =
+                ((&state[i] ^ ((prev ^ (prev >> shift)) * mult2)) - U32::from(i as u32)).simplify();
         }
         let last = &state[N - 1];
-        state[1] = (&state[1] ^ ((last ^ (last >> shift)) * mult2)) - &U32::from(1);
+        state[1] = ((&state[1] ^ ((last ^ (last >> shift)) * mult2)) - &U32::from(1)).simplify();
 
         state[0] = U32::from(0x80000000);
         Z3Random::from_state(state)
@@ -74,16 +76,16 @@ impl Z3Random {
         for k in 0..N - M {
             let y = (&state[k] & upper_mask) | (&state[k + 1] & lower_mask);
             let mag = U32::ite(&(&state[k + 1] & one).equals(zero), zero, matrix_a);
-            state[k] = &state[k + M] ^ (y >> one) ^ mag;
+            state[k] = (&state[k + M] ^ (y >> one) ^ mag).simplify();
         }
         for k in N - M..N - 1 {
             let y = (&state[k] & upper_mask) | (&state[k + 1] & lower_mask);
             let mag = U32::ite(&(&state[k + 1] & one).equals(zero), zero, matrix_a);
-            state[k] = &state[k - (N - M)] ^ (y >> one) ^ mag;
+            state[k] = (&state[k - (N - M)] ^ (y >> one) ^ mag).simplify();
         }
         let y = (&state[N - 1] & upper_mask) | (&state[0] & lower_mask);
         let mag = U32::ite(&(&state[0] & one).equals(zero), zero, matrix_a);
-        state[N - 1] = &state[M - 1] ^ (y >> one) ^ mag;
+        state[N - 1] = (&state[M - 1] ^ (y >> one) ^ mag).simplify();
     }
 
     pub fn temper(mut x: U32) -> U32 {
@@ -120,6 +122,12 @@ impl Z3Random {
         self.index += 1;
         Z3Random::temper(y)
     }
+
+    pub fn simplify(&mut self) {
+        for x in self.state.iter_mut() {
+            *x = x.simplify();
+        }
+    }
 }
 
 #[cfg(test)]
@@ -148,15 +156,19 @@ mod tests {
     #[test]
     #[ignore = "too slow"]
     fn solve_seed() {
-        let seed_var = U32::new(CStr::from_bytes_with_nul(b"seed\0").unwrap());
-        let mut z3rand = Z3Random::from_u32(&seed_var);
+        let seed = U32::new(CStr::from_bytes_with_nul(b"seed\0").unwrap());
+        println!("Starting Z3Random::from_u32");
+        let mut z3rand = Z3Random::from_u32(&seed);
+        println!("Starting Z3Random::next_u32");
         let x = z3rand.next_u32();
         let solver = Solver::new();
         solver.assert(&x.equals(&U32::from(0xb24bcdfe)));
+        println!("Starting Solver::check");
         assert_eq!(solver.check(), SatResult::Sat);
         let model = solver.get_model().unwrap();
-        let seed = seed_var.eval(&model, true).unwrap().as_const().unwrap();
-        assert_eq!(seed, 123);
+        println!("Starting U32::eval");
+        let seed_const = seed.eval(&model, true).unwrap().as_const().unwrap();
+        assert_eq!(seed_const, 123);
     }
 
     #[test]
