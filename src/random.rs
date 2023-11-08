@@ -119,7 +119,7 @@ impl Random {
         &self.state
     }
 
-    fn twist(&mut self) {
+    pub fn twist(&mut self) {
         const M: usize = 397;
         const MATRIX_A: u32 = 0x9908b0df;
 

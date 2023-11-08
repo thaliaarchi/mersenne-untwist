@@ -43,15 +43,19 @@ pub enum Unary {
 }
 
 impl State {
-    pub fn new(transparent_symbols: bool) -> Self {
+    pub fn new() -> Self {
         State {
             values: (0..N)
                 .map(|i| (Value::Symbol(Symbol::new(i, Version::Pre)), Version::Pre))
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap(),
-            transparent_symbols,
+            transparent_symbols: false,
         }
+    }
+
+    pub fn transparent_symbols(&mut self, transparent_symbols: bool) {
+        self.transparent_symbols = transparent_symbols;
     }
 
     pub fn get(&self, index: usize) -> Value {
@@ -68,6 +72,14 @@ impl State {
     pub fn set(&mut self, index: usize, v: Value) {
         assert_eq!(self.values[index].1, Version::Pre);
         self.values[index] = (v, Version::Post);
+    }
+
+    pub fn eval(&self, state: &[u32; N]) -> [u32; N] {
+        let mut state1 = state.clone();
+        for (i, (v, _)) in self.values.iter().enumerate() {
+            state1[i] = v.eval(self, state, &state1);
+        }
+        state1
     }
 
     pub fn twist(&mut self) {
@@ -124,6 +136,29 @@ impl Value {
     pub fn shr1(x: Value) -> Self {
         Value::Unary(Unary::Shr1, Box::new(x))
     }
+
+    pub fn eval(&self, state: &State, state0: &[u32], state1: &[u32]) -> u32 {
+        match self {
+            Value::Symbol(sym) => match sym.version {
+                Version::Pre => state0[sym.index as usize],
+                Version::Post => state1[sym.index as usize],
+            },
+            Value::Xor(x, y) => {
+                let x = x.eval(state, state0, state1);
+                let y = y.eval(state, state0, state1);
+                x ^ y
+            }
+            Value::Unary(op, x) => {
+                let x = x.eval(state, state0, state1);
+                match op {
+                    Unary::Mid => x & 0x7ffffffe,
+                    Unary::Msb => x & 0x80000000,
+                    Unary::Mag => (x & 0x1) * 0x9908b0df,
+                    Unary::Shr1 => x >> 1,
+                }
+            }
+        }
+    }
 }
 
 impl BitXor for Value {
@@ -173,5 +208,27 @@ impl Display for State {
             writeln!(f, "{} = {v}", Symbol::new(i, version))?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Random;
+
+    use super::*;
+
+    #[test]
+    fn twist() {
+        let mut rand = Random::from_u32(12345);
+        let state0 = rand.state().clone();
+        rand.twist();
+        let state1 = rand.state().clone();
+
+        let mut s = State::new();
+        s.transparent_symbols(true);
+        s.twist();
+
+        println!("{s}");
+        assert_eq!(s.eval(&state0), state1);
     }
 }
