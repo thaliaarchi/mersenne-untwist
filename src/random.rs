@@ -123,18 +123,24 @@ impl Random {
         const M: usize = 397;
         const MATRIX_A: u32 = 0x9908b0df;
 
+        #[cfg(test)]
+        let state0 = self.state;
+
         // Generate N words at one time
         let state = &mut self.state;
-        for k in 0..N - M {
-            let y = (state[k] & 0x80000000) | (state[k + 1] & 0x7ffffffe);
-            state[k] = state[k + M] ^ (y >> 1) ^ ((state[k + 1] & 0x1) * MATRIX_A);
+        for i in 0..N - M {
+            let y = (state[i] & 0x80000000) | (state[i + 1] & 0x7ffffffe);
+            state[i] = state[i + M] ^ (y >> 1) ^ ((state[i + 1] & 0x1) * MATRIX_A);
         }
-        for k in N - M..N - 1 {
-            let y = (state[k] & 0x80000000) | (state[k + 1] & 0x7ffffffe);
-            state[k] = state[k - (N - M)] ^ (y >> 1) ^ ((state[k + 1] & 0x1) * MATRIX_A);
+        for i in N - M..N - 1 {
+            let y = (state[i] & 0x80000000) | (state[i + 1] & 0x7ffffffe);
+            state[i] = state[i - (N - M)] ^ (y >> 1) ^ ((state[i + 1] & 0x1) * MATRIX_A);
         }
         let y = (state[N - 1] & 0x80000000) | (state[0] & 0x7ffffffe);
         state[N - 1] = state[M - 1] ^ (y >> 1) ^ ((state[0] & 0x1) * MATRIX_A);
+
+        #[cfg(test)]
+        Random::untwist_verify(&state0, &self.state);
     }
 
     pub fn temper(mut x: u32) -> u32 {
