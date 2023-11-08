@@ -171,22 +171,73 @@ impl BitXor for Value {
 
 impl Display for Symbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self.version {
-            Version::Pre => write!(f, "s{}", self.index),
-            Version::Post => write!(f, "s'{}", self.index),
+        if f.alternate() {
+            match self.version {
+                Version::Pre => write!(f, "s0[{}]", self.index),
+                Version::Post => write!(f, "s1[{}]", self.index),
+            }
+        } else {
+            match self.version {
+                Version::Pre => write!(f, "s{}", self.index),
+                Version::Post => write!(f, "s'{}", self.index),
+            }
         }
     }
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Value::Symbol(sym) => write!(f, "{sym}"),
-            Value::Xor(x, y) => write!(f, "{x} ^ {y}"),
-            Value::Unary(op, x) => match **x {
-                Value::Symbol(_) => write!(f, "{op} {x}"),
-                Value::Xor(_, _) | Value::Unary(_, _) => write!(f, "{op}({x})"),
-            },
+        if f.alternate() {
+            match self {
+                Value::Symbol(sym) => write!(f, "{sym:#}"),
+                Value::Xor(x, y) => {
+                    fn paren(f: &mut Formatter<'_>, v: &Value) -> fmt::Result {
+                        match v {
+                            Value::Unary(_, _) => write!(f, "({v:#})"),
+                            Value::Xor(_, _) | Value::Symbol(_) => write!(f, "{v:#}"),
+                        }
+                    }
+                    paren(f, &**x)?;
+                    write!(f, " ^ ")?;
+                    paren(f, &**y)
+                }
+                Value::Unary(op, x) => {
+                    fn paren(f: &mut Formatter<'_>, v: &Value) -> fmt::Result {
+                        match v {
+                            Value::Xor(_, _) | Value::Unary(_, _) => write!(f, "({v:#})"),
+                            Value::Symbol(_) => write!(f, "{v:#}"),
+                        }
+                    }
+                    match op {
+                        Unary::Mid => {
+                            paren(f, &**x)?;
+                            write!(f, " & 0x7ffffffe")
+                        }
+                        Unary::Msb => {
+                            paren(f, &**x)?;
+                            write!(f, " & 0x80000000")
+                        }
+                        Unary::Mag => {
+                            write!(f, "(")?;
+                            paren(f, &**x)?;
+                            write!(f, " & 0x1) * 0x9908b0df")
+                        }
+                        Unary::Shr1 => {
+                            paren(f, &**x)?;
+                            write!(f, " >> 1")
+                        }
+                    }
+                }
+            }
+        } else {
+            match self {
+                Value::Symbol(sym) => write!(f, "{sym}"),
+                Value::Xor(x, y) => write!(f, "{x} ^ {y}"),
+                Value::Unary(op, x) => match **x {
+                    Value::Symbol(_) => write!(f, "{op} {x}"),
+                    Value::Xor(_, _) | Value::Unary(_, _) => write!(f, "{op}({x})"),
+                },
+            }
         }
     }
 }
@@ -205,7 +256,12 @@ impl Display for Unary {
 impl Display for State {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (i, &(ref v, version)) in self.values.iter().enumerate() {
-            writeln!(f, "{} = {v}", Symbol::new(i, version))?;
+            let sym = Symbol::new(i, version);
+            if f.alternate() {
+                writeln!(f, "{sym:#} = {v:#};")?;
+            } else {
+                writeln!(f, "{sym} = {v}")?;
+            }
         }
         Ok(())
     }
