@@ -1,6 +1,5 @@
+use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
-
-use hashbrown::HashMap;
 
 use crate::symbolic_bits::{Bit, Version, BV32};
 use crate::{M, N};
@@ -12,8 +11,8 @@ pub struct State<const N: usize = { crate::N }> {
 }
 
 #[derive(Clone, Debug)]
-pub struct ValueClasses {
-    classes: HashMap<BV32, Vec<u16>>,
+pub struct ValueClasses<'a> {
+    classes: HashMap<&'a BV32, Vec<u16>>,
 }
 
 impl<const N: usize> State<N> {
@@ -42,10 +41,10 @@ impl<const N: usize> State<N> {
         self.versions[index] = Version::S1;
     }
 
-    pub fn value_classes(&mut self) -> ValueClasses {
-        let mut classes: HashMap<BV32, Vec<u16>> = HashMap::new();
+    pub fn value_classes<'a>(&'a mut self) -> ValueClasses<'a> {
+        let mut classes: HashMap<&'a BV32, Vec<u16>> = HashMap::new();
         for (i, v) in self.values.iter().enumerate() {
-            classes.entry_ref(v).or_default().push(i as u16);
+            classes.entry(v).or_default().push(i as u16);
         }
         ValueClasses { classes }
     }
@@ -133,7 +132,7 @@ impl<const N: usize> Display for State<N> {
     }
 }
 
-impl Display for ValueClasses {
+impl Display for ValueClasses<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let mut classes = self.classes.iter().collect::<Vec<_>>();
         classes.sort_by(|(_, i1), (_, i2)| i1[0].cmp(&i2[0]));
