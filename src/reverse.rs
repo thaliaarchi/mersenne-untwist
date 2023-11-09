@@ -72,11 +72,6 @@ impl Random {
             state.set(i + 1, msb | mid | lsb, 0xffffffff);
         }
 
-        // This covers the state0[N - M] case of (2), that was skipped by
-        // shifting up by 1.
-        let msb = (state.get(N - M, 0x40000000, S1) ^ state.get(0, 0x40000000, S1)) << 1;
-        state.set(N - M, msb, 0x80000000);
-
         for i in (0..N - M).rev() {
             // (4) Solving for bit 0 of state0[i + 1]. This is identical to (1),
             // except it uses s0[i+M], in place of s1[i-(N-M)].
@@ -89,11 +84,8 @@ impl Random {
             // s0[i+1] & 0x1 == ((s0[i+M] ^ s1[i]) >> 31) & 0x1
             let lsb = (state.get(i + M, 0x80000000, S0) ^ state.get(i, 0x80000000, S1)) >> 31;
 
-            if i + M + 1 < N {
-                let msb =
-                    (state.get(i + M + 1, 0x40000000, S0) ^ state.get(i + 1, 0x40000000, S1)) << 1;
-                state.set(i + 1, msb, 0x80000000);
-            }
+            let msb = (state.get(i + M, 0x40000000, S0) ^ state.get(i, 0x40000000, S1)) << 1;
+            state.set(i, msb, 0x80000000);
 
             // (5) Solving for bits 1..=30 of state0[i + 1]. This is identical
             // to (3), except it uses s0[i+M], in place of s1[i-(N-M)].
