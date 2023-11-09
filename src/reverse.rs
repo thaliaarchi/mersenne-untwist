@@ -21,7 +21,6 @@ impl Random {
 
         let mut state = PartialState::new(state0, state1);
 
-        // 227..=622
         for i in (N - M..N - 1).rev() {
             // (1) Solving for bit 0 of state0[i + 1]:
             //
@@ -54,7 +53,7 @@ impl Random {
             // The two are equivalent and the state0[N - 1] case extends the
             // range of the state0[i] case by 1, so i can be substituted with
             // `i + 1`.
-            let msb = (state.get(i + 1 - (N - M), 0x40000000, S1)
+            let msb = (state.get(i - (N - M) + 1, 0x40000000, S1)
                 ^ state.get(i + 1, 0x40000000, S1))
                 << 1;
 
@@ -73,23 +72,43 @@ impl Random {
             state.set(i + 1, msb | mid | lsb, 0xffffffff);
         }
 
+        // This covers the state0[N - M] case of (2), that was skipped by
+        // shifting up by 1.
+        let msb = (state.get(N - M, 0x40000000, S1) ^ state.get(0, 0x40000000, S1)) << 1;
+        state.set(N - M, msb, 0x80000000);
+
         for i in (0..N - M).rev() {
-            // (5) Solving for bits 10–12, 18–19, 22–24, and 27 of state0[i + 1]
-            // proceeds like (4):
+            // (4) Solving for bit 0 of state0[i + 1]. This is identical to (1),
+            // except it uses s0[i+M], in place of s1[i-(N-M)].
             //
             // s1[i] == s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
-            // s1[i] & 0x26f74f20 == (s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x26f74f20
-            // s1[i] & 0x26f74f20 == (s0[i+M] ^ ((s0[i+1] & 0x7ffffffe) >> 1)) & 0x26f74f20
-            // s1[i] & 0x26f74f20 == (s0[i+M] ^ (s0[i+1] >> 1)) & 0x26f74f20
-            // (s0[i+1] >> 1) & 0x26f74f20 == (s0[i+M] ^ s1[i]) & 0x26f74f20
-            // s0[i+1] & 0x4dee9e40 == ((s0[i+M] ^ s1[i]) << 1) & 0x4dee9e40
+            // s1[i] & 0x80000000 == (s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x80000000
+            // s1[i] & 0x80000000 == (s0[i+M] ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x80000000
+            // s1[i] & 0x80000000 == (s0[i+M] ^ (s0[i+1] << 31)) & 0x80000000
+            // (s0[i+1] << 31) & 0x80000000 == (s0[i+M] ^ s1[i]) & 0x80000000
+            // s0[i+1] & 0x1 == ((s0[i+M] ^ s1[i]) >> 31) & 0x1
+            let lsb = (state.get(i + M, 0x80000000, S0) ^ state.get(i, 0x80000000, S1)) >> 31;
+
+            if i + M + 1 < N {
+                let msb =
+                    (state.get(i + M + 1, 0x40000000, S0) ^ state.get(i + 1, 0x40000000, S1)) << 1;
+                state.set(i + 1, msb, 0x80000000);
+            }
+
+            // (5) Solving for bits 1..=30 of state0[i + 1]. This is identical
+            // to (3), except it uses s0[i+M], in place of s1[i-(N-M)].
             //
-            // However, only the bits in `state[N-M..N-1] & 0x4dee9e40` have
-            // been reversed by (4), while the mask here is
-            // `s0[i+M] & 0x26f74f20`, so we need `0x4dee9e40 & 0x26f74f20`, or
-            // `0x04e60e00`.
-            let x = (state.get(i + M, 0x04e60e00, S0) ^ state.get(i, 0x04e60e00, S1)) << 1;
-            state.set(i + 1, x, 0x04e60e00 << 1);
+            // s1[i] == s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
+            // s1[i] == s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)
+            // s1[i] & 0x3fffffff == (s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
+            // s1[i] & 0x3fffffff == (s0[i+M] ^ (s0[i+1] >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
+            // (s0[i+1] >> 1) & 0x3fffffff == (s0[i+M] ^ s1[i] ^ (lsb * 0x9908b0df)) & 0x3fffffff
+            // s0[i+1] & 0x7ffffffe == ((s0[i+M] ^ s1[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7ffffffe
+            let mid = (state.get(i + M, 0x3fffffff, S0)
+                ^ state.get(i, 0x3fffffff, S1)
+                ^ (lsb * 0x9908b0df))
+                << 1;
+            state.set(i + 1, mid | lsb, 0x7fffffff);
         }
 
         println!("{state:b}");
