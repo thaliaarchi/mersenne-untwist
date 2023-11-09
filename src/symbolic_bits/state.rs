@@ -1,5 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 
+use hashbrown::HashMap;
+
 use crate::symbolic_bits::{Bit, Version, BV32};
 use crate::{M, N};
 
@@ -7,6 +9,11 @@ use crate::{M, N};
 pub struct State {
     values: Box<[BV32; N]>,
     versions: Box<[Version; N]>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ValueClasses {
+    classes: HashMap<BV32, Vec<u16>>,
 }
 
 impl State {
@@ -34,6 +41,14 @@ impl State {
         );
         self.values[index] = value;
         self.versions[index] = Version::S1;
+    }
+
+    pub fn value_classes(&mut self) -> ValueClasses {
+        let mut classes: HashMap<BV32, Vec<u16>> = HashMap::new();
+        for (i, v) in self.values.iter().enumerate() {
+            classes.entry_ref(v).or_default().push(i as u16);
+        }
+        ValueClasses { classes }
     }
 
     pub fn twist(&mut self) {
@@ -97,6 +112,36 @@ impl Display for State {
     }
 }
 
+impl Display for ValueClasses {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let mut classes = self.classes.iter().collect::<Vec<_>>();
+        classes.sort_by(|(_, i1), (_, i2)| i1[0].cmp(&i2[0]));
+        for (v, indices) in classes {
+            write!(f, "class ")?;
+            let mut i = 0;
+            while i < indices.len() {
+                let start = indices[i];
+                let mut end = start;
+                if i != 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{start}")?;
+                i += 1;
+                while i < indices.len() && indices[i] == end + 1 {
+                    end = indices[i];
+                    i += 1;
+                }
+                if start != end {
+                    write!(f, "–{end}")?;
+                }
+            }
+            writeln!(f, " =")?;
+            writeln!(f, "{v}")?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,6 +150,6 @@ mod tests {
     fn twist() {
         let mut state = State::new();
         state.twist();
-        println!("{state}");
+        println!("{}", state.value_classes());
     }
 }

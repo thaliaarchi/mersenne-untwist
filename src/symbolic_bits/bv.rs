@@ -4,25 +4,25 @@ use std::ops::{
     BitAnd, BitAndAssign, BitXor, BitXorAssign, Mul, MulAssign, Shl, ShlAssign, Shr, ShrAssign,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BV32 {
     pub(super) bits: Box<[Bit; 32]>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Bit {
     Const(bool),
     Xor(Vec<Var>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Var {
     index_offset: i16,
     bit: u8,
     version: Version,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Version {
     S0 = 0,
@@ -54,6 +54,18 @@ impl Var {
             bit: bit as u8,
             version,
         }
+    }
+}
+
+impl From<&BV32> for BV32 {
+    fn from(value: &BV32) -> Self {
+        value.clone()
+    }
+}
+
+impl From<bool> for Bit {
+    fn from(value: bool) -> Self {
+        Bit::Const(value)
     }
 }
 
@@ -218,9 +230,8 @@ impl Display for Bit {
             Bit::Const(false) => write!(f, "0"),
             Bit::Const(true) => write!(f, "1"),
             Bit::Xor(xs) => {
-                let (x, xs) = xs.split_first().unwrap();
-                write!(f, "{x}")?;
-                for x in xs {
+                write!(f, "{}", xs[0])?;
+                for x in &xs[1..] {
                     write!(f, " ^ {x}")?;
                 }
                 Ok(())
