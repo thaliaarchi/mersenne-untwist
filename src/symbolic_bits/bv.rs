@@ -1,4 +1,5 @@
 use std::fmt::{self, Display, Formatter};
+use std::mem;
 use std::ops::{
     BitAnd, BitAndAssign, BitXor, BitXorAssign, Mul, MulAssign, Shl, ShlAssign, Shr, ShrAssign,
 };
@@ -58,9 +59,9 @@ impl Var {
 
 impl BitXorAssign for BV32 {
     fn bitxor_assign(&mut self, rhs: BV32) {
-        for i in 0..32 {
-            // TODO: clones
-            self.bits[i] = self.bits[i].clone() ^ rhs.bits[i].clone();
+        for (i, y) in rhs.bits.to_vec().drain(..).enumerate() {
+            let x = mem::replace(&mut self.bits[i], Bit::Const(false));
+            self.bits[i] = x ^ y
         }
     }
 }
@@ -79,7 +80,7 @@ impl ShlAssign<usize> for BV32 {
     fn shl_assign(&mut self, rhs: usize) {
         assert!(rhs < 32);
         for i in 0..rhs {
-            self.bits[i] = self.bits[rhs + i].clone(); // TODO: clone
+            self.bits[i] = mem::replace(&mut self.bits[rhs + i], Bit::Const(false));
         }
     }
 }
@@ -88,7 +89,7 @@ impl ShrAssign<usize> for BV32 {
     fn shr_assign(&mut self, rhs: usize) {
         assert!(rhs < 32);
         for i in 0..rhs {
-            self.bits[rhs + i] = self.bits[i].clone(); // TODO: clone
+            self.bits[rhs + i] = mem::replace(&mut self.bits[i], Bit::Const(false));
         }
     }
 }
@@ -157,19 +158,24 @@ impl Mul<u32> for BV32 {
     }
 }
 
+impl BitXorAssign for Bit {
+    fn bitxor_assign(&mut self, rhs: Self) {
+        match (self, rhs) {
+            (Bit::Const(x), Bit::Const(y)) => *x = *x != y,
+            (Bit::Xor(xs), Bit::Xor(ys)) => xs.extend_from_slice(&ys),
+            (_, Bit::Const(false)) => {}
+            (lhs @ Bit::Const(false), rhs) => *lhs = rhs,
+            _ => unimplemented!("bit complement"),
+        }
+    }
+}
+
 impl BitXor for Bit {
     type Output = Bit;
 
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Bit::Const(x), Bit::Const(y)) => Bit::Const(x != y),
-            (x, Bit::Const(false)) | (Bit::Const(false), x) => x,
-            (Bit::Xor(mut xs), Bit::Xor(ys)) => {
-                xs.extend_from_slice(&ys);
-                Bit::Xor(xs)
-            }
-            _ => unimplemented!("bit complement"),
-        }
+    fn bitxor(mut self, rhs: Self) -> Self::Output {
+        self ^= rhs;
+        self
     }
 }
 
