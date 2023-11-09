@@ -41,8 +41,7 @@ impl Debug for Graph {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (i, edges) in self.adjacent.iter().enumerate() {
             let (first, rest) = edges.split_first().unwrap();
-            let var = Var::new(i / 32, i % 32, Version::S1);
-            write!(f, "{var} = {first}")?;
+            write!(f, "s1.{}.{} = {first}", i / 32, i % 32)?;
             for node in rest {
                 write!(f, " ^ {node}")?;
             }
@@ -56,9 +55,8 @@ impl Display for Graph {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         writeln!(f, "digraph mt19937_state {{")?;
         for (i, edges) in self.adjacent.iter().enumerate() {
-            let var = Var::new(i / 32, i % 32, Version::S1);
             for node in edges {
-                writeln!(f, "    \"{var}\" -> \"{node}\";")?;
+                writeln!(f, "    \"s1.{}.{}\" -> \"{node}\";", i / 32, i % 32)?;
             }
         }
         writeln!(f, "}}")

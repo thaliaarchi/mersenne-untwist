@@ -17,7 +17,7 @@ pub enum Bit {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Var {
-    index: u16,
+    index_offset: i16,
     bit: u8,
     version: Version,
 }
@@ -30,10 +30,10 @@ pub enum Version {
 }
 
 impl BV32 {
-    pub fn new(index: usize, version: Version) -> Self {
+    pub fn new(index_offset: isize, version: Version) -> Self {
         BV32 {
             bits: (0..32)
-                .map(|bit| Bit::Ref(Var::new(index, bit, version)))
+                .map(|bit| Bit::Ref(Var::new(index_offset, bit, version)))
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap(),
@@ -42,9 +42,9 @@ impl BV32 {
 }
 
 impl Var {
-    pub fn new(index: usize, bit: usize, version: Version) -> Self {
+    pub fn new(index_offset: isize, bit: usize, version: Version) -> Self {
         Var {
-            index: index as u16,
+            index_offset: index_offset as i16,
             bit: bit as u8,
             version,
         }
@@ -211,7 +211,11 @@ impl Display for Bit {
 
 impl Display for Var {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "s{}.{}.{}", self.version as u8, self.index, self.bit)
+        write!(
+            f,
+            "s{}.{:+}.{}",
+            self.version as u8, self.index_offset, self.bit,
+        )
     }
 }
 

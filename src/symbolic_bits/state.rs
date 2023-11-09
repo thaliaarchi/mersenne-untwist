@@ -13,7 +13,7 @@ impl State {
     pub fn new() -> Self {
         State {
             values: (0..N)
-                .map(|i| BV32::new(i, Version::S0))
+                .map(|i| BV32::new(i as isize, Version::S0))
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap(),
@@ -25,8 +25,9 @@ impl State {
         Graph::from_state(self)
     }
 
-    fn get(&self, index: usize) -> BV32 {
-        BV32::new(index, self.versions[index])
+    fn get(&self, index: usize, offset: isize) -> BV32 {
+        let version = self.versions[index.checked_add_signed(offset).unwrap()];
+        BV32::new(offset, version)
     }
 
     fn set(&mut self, index: usize, value: BV32) {
@@ -43,27 +44,27 @@ impl State {
         for i in 0..N - M {
             self.set(
                 i,
-                self.get(i + M)
-                    ^ ((self.get(i) & 0x80000000) >> 1)
-                    ^ ((self.get(i + 1) & 0x7ffffffe) >> 1)
-                    ^ ((self.get(i + 1) & 0x1) * 0x9908b0df),
+                self.get(i, M as isize)
+                    ^ ((self.get(i, 0) & 0x80000000) >> 1)
+                    ^ ((self.get(i, 1) & 0x7ffffffe) >> 1)
+                    ^ ((self.get(i, 1) & 0x1) * 0x9908b0df),
             );
         }
         for i in N - M..N - 1 {
             self.set(
                 i,
-                self.get(i - (N - M))
-                    ^ ((self.get(i) & 0x80000000) >> 1)
-                    ^ ((self.get(i + 1) & 0x7ffffffe) >> 1)
-                    ^ ((self.get(i + 1) & 0x1) * 0x9908b0df),
+                self.get(i, -((N - M) as isize))
+                    ^ ((self.get(i, 0) & 0x80000000) >> 1)
+                    ^ ((self.get(i, 1) & 0x7ffffffe) >> 1)
+                    ^ ((self.get(i, 1) & 0x1) * 0x9908b0df),
             );
         }
         self.set(
             N - 1,
-            self.get(M - 1)
-                ^ ((self.get(N - 1) & 0x80000000) >> 1)
-                ^ ((self.get(0) & 0x7ffffffe) >> 1)
-                ^ ((self.get(0) & 0x1) * 0x9908b0df),
+            self.get(N - 1, (M - 1) as isize - (N - 1) as isize)
+                ^ ((self.get(N - 1, 0) & 0x80000000) >> 1)
+                ^ ((self.get(N - 1, -((N - 1) as isize)) & 0x7ffffffe) >> 1)
+                ^ ((self.get(N - 1, -((N - 1) as isize)) & 0x1) * 0x9908b0df),
         );
     }
 }
