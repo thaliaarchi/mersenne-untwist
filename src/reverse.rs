@@ -215,18 +215,26 @@ impl<'a> PartialState<'a> {
                 Version::S0 => self.reversed[i] & mask == mask,
                 Version::S1 => !self.reversed[i] & mask == mask,
             },
-            "[{i}]\n\
+            "get {version}[{i}]\n\
                 reversed = {reversed:08x} {reversed:032b}\n\
-                mask     = {mask:08x} {mask:032b}\n\
-                version  = {version:?}",
+                mask     = {mask:08x} {mask:032b}",
             reversed = self.reversed[i],
         );
         self.values[i]
     }
 
     fn set(&mut self, i: usize, value: u32, mask: u32) {
-        assert!(self.reversed[i] & mask == 0);
-        assert_eq!(value & mask, self.state0_verify[i] & mask);
+        assert!(self.reversed[i] & mask == 0, "set state0[{i}]");
+        assert!(
+            value & mask == self.state0_verify[i] & mask,
+            "set state0[{i}]\n\
+                value    = {value:08x} {value:032b}\n\
+                expected = {expected:08x} {expected:032b}\n\
+                reversed = {reversed:08x} {reversed:032b}\n\
+                mask     = {mask:08x} {mask:032b}",
+            expected = self.state0_verify[i],
+            reversed = self.reversed[i],
+        );
         self.values[i] &= !mask;
         self.values[i] |= value & mask;
         self.reversed[i] |= mask;
@@ -293,6 +301,15 @@ impl Binary for PartialState<'_> {
             )?;
         }
         self.write_stat(f)
+    }
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Version::S0 => write!(f, "state0"),
+            Version::S1 => write!(f, "state1"),
+        }
     }
 }
 
