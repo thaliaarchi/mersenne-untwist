@@ -6,7 +6,7 @@ use crate::symbolic_bits::{Bit, Version, BV32};
 use crate::{M, N};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct State {
+pub struct State<const N: usize = { crate::N }> {
     values: Box<[BV32; N]>,
     versions: Box<[Version; N]>,
 }
@@ -16,7 +16,7 @@ pub struct ValueClasses {
     classes: HashMap<BV32, Vec<u16>>,
 }
 
-impl State {
+impl<const N: usize> State<N> {
     pub fn new() -> Self {
         State {
             values: (0..N)
@@ -28,9 +28,8 @@ impl State {
         }
     }
 
-    fn get(&self, index: usize, offset: isize) -> BV32 {
-        let version = self.versions[index.checked_add_signed(offset).unwrap()];
-        BV32::new(offset, version)
+    fn get(&self, base: usize, index: usize) -> BV32 {
+        BV32::new(index as isize - base as isize, self.versions[index])
     }
 
     fn set(&mut self, index: usize, value: BV32) {
@@ -51,36 +50,58 @@ impl State {
         ValueClasses { classes }
     }
 
-    pub fn twist(&mut self) {
-        for i in 0..N - M {
-            self.set(
-                i,
-                self.get(i, M as isize)
-                    ^ ((self.get(i, 0) & 0x80000000) >> 1)
-                    ^ ((self.get(i, 1) & 0x7ffffffe) >> 1)
-                    ^ ((self.get(i, 1) & 0x1) * 0x9908b0df),
-            );
+    pub fn eval(&self, state0: &[u32; N], state1: &[u32; N]) -> [u32; N] {
+        let mut state = [0; N];
+        for (i, abs_v) in self.values.iter().enumerate() {
+            let mut v = 0;
+            for (j, abs_bit) in abs_v.bits.iter().enumerate() {
+                let bit = match abs_bit {
+                    Bit::Const(b) => *b as u32,
+                    Bit::Xor(xs) => {
+                        let mut b = 0;
+                        for x in xs {
+                            let s = match x.version() {
+                                Version::S0 => state0,
+                                Version::S1 => state1,
+                            };
+                            b ^= (s[x.index(i)] >> x.bit()) & 1;
+                        }
+                        b
+                    }
+                };
+                v |= bit << j;
+            }
+            state[i] = v;
         }
-        for i in N - M..N - 1 {
-            self.set(
-                i,
-                self.get(i, -((N - M) as isize))
-                    ^ ((self.get(i, 0) & 0x80000000) >> 1)
-                    ^ ((self.get(i, 1) & 0x7ffffffe) >> 1)
-                    ^ ((self.get(i, 1) & 0x1) * 0x9908b0df),
-            );
-        }
-        self.set(
-            N - 1,
-            self.get(N - 1, (M - 1) as isize - (N - 1) as isize)
-                ^ ((self.get(N - 1, 0) & 0x80000000) >> 1)
-                ^ ((self.get(N - 1, -((N - 1) as isize)) & 0x7ffffffe) >> 1)
-                ^ ((self.get(N - 1, -((N - 1) as isize)) & 0x1) * 0x9908b0df),
-        );
+        state
     }
 }
 
-impl Display for State {
+impl State<N> {
+    pub fn twist(&mut self) {
+        for i in 0..N - M {
+            let v = self.get(i, i + M)
+                ^ ((self.get(i, i) & 0x80000000) >> 1)
+                ^ ((self.get(i, i + 1) & 0x7ffffffe) >> 1)
+                ^ ((self.get(i, i + 1) & 0x1) * 0x9908b0df);
+            self.set(i, v);
+        }
+        for i in N - M..N - 1 {
+            let v = self.get(i, i - (N - M))
+                ^ ((self.get(i, i) & 0x80000000) >> 1)
+                ^ ((self.get(i, i + 1) & 0x7ffffffe) >> 1)
+                ^ ((self.get(i, i + 1) & 0x1) * 0x9908b0df);
+            self.set(i, v);
+        }
+        let v = self.get(N - 1, M - 1)
+            ^ ((self.get(N - 1, N - 1) & 0x80000000) >> 1)
+            ^ ((self.get(N - 1, 0) & 0x7ffffffe) >> 1)
+            ^ ((self.get(N - 1, 0) & 0x1) * 0x9908b0df);
+        self.set(N - 1, v);
+    }
+}
+
+impl<const N: usize> Display for State<N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if f.alternate() {
             writeln!(f, "digraph mt19937_state {{")?;
@@ -144,12 +165,71 @@ impl Display for ValueClasses {
 
 #[cfg(test)]
 mod tests {
+    use crate::Random;
+
     use super::*;
 
     #[test]
     fn twist() {
-        let mut state = State::new();
-        state.twist();
-        println!("{}", state.value_classes());
+        let mut rand = Random::from_u32(12345);
+        let state0 = rand.state().clone();
+        rand.twist();
+        let state1 = rand.state().clone();
+
+        let mut s = State::new();
+        s.twist();
+        println!("{}", s.value_classes());
+        let state1_sym = s.eval(&state0, &state1);
+        if state1_sym != state1 {
+            for i in 0..N {
+                if state1_sym[i] != state1[i] {
+                    println!(
+                        "[{i:3}]:\n\
+                        symbolic s1 = {:032b}\n\
+                        concrete s1 = {:032b}\n\
+                        s0          = {:032b}",
+                        state1_sym[i], state1[i], state0[i],
+                    );
+                }
+            }
+            panic!("symbolic evaluation differs from concrete");
+        }
+    }
+
+    #[test]
+    fn eval() {
+        let state0 = [0x123, 0x456, 0x789];
+        let [mut x, mut y, mut z] = state0;
+        x = (((x << 12) ^ y) << 12) ^ z;
+        z = x ^ y;
+        y = ((z >> 3) & 1) * 0x9876543;
+        let state1 = [x, y, z];
+
+        let x = {
+            let x = BV32::new(0, Version::S0);
+            let y = BV32::new(1, Version::S0);
+            let z = BV32::new(2, Version::S0);
+            (((x << 12) ^ y) << 12) ^ z
+        };
+        let z = {
+            let x = BV32::new(-2, Version::S1);
+            let y = BV32::new(-1, Version::S0);
+            x ^ y
+        };
+        let y = {
+            let z = BV32::new(1, Version::S1);
+            ((z >> 3) & 1) * 0x9876543
+        };
+        let state = State::<3> {
+            values: Box::new([x, y, z]),
+            versions: Box::new([Version::S1; 3]),
+        };
+
+        let state1_sym = state.eval(&state0, &state1);
+        if state1_sym != state1 {
+            println!("symbolic state1 = {state1_sym:08x?}");
+            println!("state1          = {state1:08x?}");
+            panic!("symbolic evaluation differs from concrete");
+        }
     }
 }

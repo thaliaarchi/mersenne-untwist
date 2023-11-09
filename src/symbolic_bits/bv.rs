@@ -39,11 +39,27 @@ impl BV32 {
                 .unwrap(),
         }
     }
+
+    pub fn as_const(&self) -> Option<u32> {
+        self.bits
+            .iter()
+            .enumerate()
+            .try_fold(0u32, |acc, (i, bit)| {
+                bit.as_const().map(|b| acc | (b as u32) << i)
+            })
+    }
 }
 
 impl Bit {
     pub fn new_ref(var: Var) -> Self {
         Bit::Xor(vec![var])
+    }
+
+    pub fn as_const(&self) -> Option<bool> {
+        match self {
+            Bit::Const(b) => Some(*b),
+            Bit::Xor(_) => None,
+        }
     }
 }
 
@@ -55,11 +71,41 @@ impl Var {
             version,
         }
     }
+
+    pub fn index(&self, index: usize) -> usize {
+        index
+            .checked_add_signed(self.index_offset as isize)
+            .unwrap()
+    }
+
+    pub fn index_offset(&self) -> isize {
+        self.index_offset as isize
+    }
+
+    pub fn bit(&self) -> usize {
+        self.bit as usize
+    }
+
+    pub fn version(&self) -> Version {
+        self.version
+    }
 }
 
 impl From<&BV32> for BV32 {
     fn from(value: &BV32) -> Self {
         value.clone()
+    }
+}
+
+impl From<u32> for BV32 {
+    fn from(value: u32) -> Self {
+        BV32 {
+            bits: (0..32)
+                .map(|i| Bit::from((value >> i) & 1 != 0))
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
+        }
     }
 }
 
@@ -91,8 +137,9 @@ impl BitAndAssign<u32> for BV32 {
 impl ShlAssign<usize> for BV32 {
     fn shl_assign(&mut self, rhs: usize) {
         assert!(rhs < 32);
+        self.bits.rotate_right(rhs);
         for i in 0..rhs {
-            self.bits[i] = mem::replace(&mut self.bits[rhs + i], Bit::Const(false));
+            self.bits[i] = Bit::Const(false);
         }
     }
 }
@@ -100,8 +147,9 @@ impl ShlAssign<usize> for BV32 {
 impl ShrAssign<usize> for BV32 {
     fn shr_assign(&mut self, rhs: usize) {
         assert!(rhs < 32);
-        for i in 0..rhs {
-            self.bits[rhs + i] = mem::replace(&mut self.bits[i], Bit::Const(false));
+        self.bits.rotate_left(rhs);
+        for i in 32 - rhs..32 {
+            self.bits[i] = Bit::Const(false);
         }
     }
 }

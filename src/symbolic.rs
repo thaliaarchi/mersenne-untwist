@@ -4,7 +4,7 @@ use std::ops::{BitXor, Index};
 use crate::{M, N};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct State {
+pub struct State<const N: usize = { crate::N }> {
     values: Box<[(Value, Version); N]>,
     transparent_symbols: bool,
 }
@@ -17,8 +17,8 @@ pub struct Symbol {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Version {
-    Pre,
-    Post,
+    S0,
+    S1,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -42,11 +42,11 @@ pub enum Unary {
     Shr1,
 }
 
-impl State {
+impl<const N: usize> State<N> {
     pub fn new() -> Self {
         State {
             values: (0..N)
-                .map(|i| (Value::Symbol(Symbol::new(i, Version::Pre)), Version::Pre))
+                .map(|i| (Value::Symbol(Symbol::new(i, Version::S0)), Version::S0))
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap(),
@@ -70,32 +70,34 @@ impl State {
     }
 
     pub fn set(&mut self, index: usize, v: Value) {
-        assert_eq!(self.values[index].1, Version::Pre);
-        self.values[index] = (v, Version::Post);
+        assert_eq!(self.values[index].1, Version::S0);
+        self.values[index] = (v, Version::S1);
     }
 
-    pub fn eval(&self, state: &[u32; N]) -> [u32; N] {
-        let mut state1 = state.clone();
+    pub fn eval(&self, state0: &[u32; N]) -> [u32; N] {
+        let mut state1 = state0.clone();
         for (i, (v, _)) in self.values.iter().enumerate() {
-            state1[i] = v.eval(self, state, &state1);
+            state1[i] = v.eval(self, state0, &state1);
         }
         state1
     }
+}
 
+impl State<N> {
     pub fn twist(&mut self) {
-        for k in 0..N - M {
-            let v = self.get(k + M)
-                ^ Value::shr1(Value::msb(self.get(k)))
-                ^ Value::shr1(Value::mid(self.get(k + 1)))
-                ^ Value::mag(self.get(k + 1));
-            self.set(k, v);
+        for i in 0..N - M {
+            let v = self.get(i + M)
+                ^ Value::shr1(Value::msb(self.get(i)))
+                ^ Value::shr1(Value::mid(self.get(i + 1)))
+                ^ Value::mag(self.get(i + 1));
+            self.set(i, v);
         }
-        for k in N - M..N - 1 {
-            let v = self.get(k - (N - M))
-                ^ Value::shr1(Value::msb(self.get(k)))
-                ^ Value::shr1(Value::mid(self.get(k + 1)))
-                ^ Value::mag(self.get(k + 1));
-            self.set(k, v);
+        for i in N - M..N - 1 {
+            let v = self.get(i - (N - M))
+                ^ Value::shr1(Value::msb(self.get(i)))
+                ^ Value::shr1(Value::mid(self.get(i + 1)))
+                ^ Value::mag(self.get(i + 1));
+            self.set(i, v);
         }
         let v = self.get(M - 1)
             ^ Value::shr1(Value::msb(self.get(N - 1)))
@@ -136,11 +138,11 @@ impl Value {
         Value::Unary(Unary::Shr1, Box::new(x))
     }
 
-    pub fn eval(&self, state: &State, state0: &[u32], state1: &[u32]) -> u32 {
+    pub fn eval<const N: usize>(&self, state: &State<N>, state0: &[u32], state1: &[u32]) -> u32 {
         match self {
             Value::Symbol(sym) => match sym.version {
-                Version::Pre => state0[sym.index as usize],
-                Version::Post => state1[sym.index as usize],
+                Version::S0 => state0[sym.index as usize],
+                Version::S1 => state1[sym.index as usize],
             },
             Value::Xor(x, y) => {
                 let x = x.eval(state, state0, state1);
@@ -172,13 +174,13 @@ impl Display for Symbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if f.alternate() {
             match self.version {
-                Version::Pre => write!(f, "s0[{}]", self.index),
-                Version::Post => write!(f, "s1[{}]", self.index),
+                Version::S0 => write!(f, "s0[{}]", self.index),
+                Version::S1 => write!(f, "s1[{}]", self.index),
             }
         } else {
             match self.version {
-                Version::Pre => write!(f, "s{}", self.index),
-                Version::Post => write!(f, "s'{}", self.index),
+                Version::S0 => write!(f, "s{}", self.index),
+                Version::S1 => write!(f, "s'{}", self.index),
             }
         }
     }
