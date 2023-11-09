@@ -9,6 +9,7 @@ mod random;
 mod reverse;
 mod smt;
 pub mod symbolic;
+pub mod symbolic_bits;
 
 pub use random::*;
 pub use reverse::*;

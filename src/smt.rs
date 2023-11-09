@@ -1,4 +1,4 @@
-use crate::{global_z3::U32, Random, N};
+use crate::{global_z3::U32, Random, M, N};
 
 #[derive(Debug, Clone)]
 pub struct Z3Random {
@@ -65,7 +65,6 @@ impl Z3Random {
     }
 
     fn twist(&mut self) {
-        const M: usize = 397;
         let matrix_a = &U32::from(0x9908b0df);
         let upper_mask = &U32::from(0x80000000);
         let lower_mask = &U32::from(0x7ffffffe);

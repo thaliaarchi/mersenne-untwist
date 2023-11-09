@@ -1,4 +1,5 @@
 pub(crate) const N: usize = 624;
+pub(crate) const M: usize = 397;
 
 /// The state of MT19937.
 ///
@@ -120,7 +121,6 @@ impl Random {
     }
 
     pub fn twist(&mut self) {
-        const M: usize = 397;
         const MATRIX_A: u32 = 0x9908b0df;
 
         #[cfg(test)]

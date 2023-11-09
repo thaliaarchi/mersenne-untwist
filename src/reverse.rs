@@ -1,6 +1,6 @@
 use std::fmt::{self, Binary, Display, Formatter};
 
-use crate::{Random, N};
+use crate::{Random, M, N};
 
 impl Random {
     /// Reverses [`Random::from_u32`].
@@ -18,8 +18,6 @@ impl Random {
     /// Reverses [`Random::twist`].
     pub fn untwist_verify(state0: &[u32; N], state1: &[u32; N]) {
         use Version::*;
-
-        const M: usize = 397;
 
         let mut state = PartialState::new(state0, state1);
 
@@ -260,14 +258,12 @@ impl Display for PartialState<'_> {
                 "[{i:3}]: \
                     s0 part = {:08x} in {:08x}, \
                     s1 part = {:08x} in {:08x}, \
-                    mix = {:08x}, \
                     s0 = {:08x}, \
                     s1 = {:08x}",
                 self.values[i] & self.reversed[i],
                 self.reversed[i],
                 self.values[i] & !self.reversed[i],
                 !self.reversed[i],
-                self.values[i],
                 self.state0_verify[i],
                 self.state1_verify[i],
             )?;
@@ -296,8 +292,8 @@ impl Binary for PartialState<'_> {
             write_part(f, self.values[i], !self.reversed[i])?;
             writeln!(
                 f,
-                ", mix = {:032b}, s0 = {:032b}, s1 = {:032b}",
-                self.values[i], self.state0_verify[i], self.state1_verify[i],
+                ", s0 = {:032b}, s1 = {:032b}",
+                self.state0_verify[i], self.state1_verify[i],
             )?;
         }
         self.write_stat(f)

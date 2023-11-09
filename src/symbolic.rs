@@ -1,7 +1,7 @@
 use std::fmt::{self, Display, Formatter};
 use std::ops::{BitXor, Index};
 
-use crate::N;
+use crate::{M, N};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct State {
@@ -83,7 +83,6 @@ impl State {
     }
 
     pub fn twist(&mut self) {
-        const M: usize = 397;
         for k in 0..N - M {
             let v = self.get(k + M)
                 ^ Value::shr1(Value::msb(self.get(k)))
