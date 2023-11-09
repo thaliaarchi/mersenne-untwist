@@ -1,3 +1,5 @@
+use std::fmt::{self, Binary, Display, Formatter};
+
 use crate::{Random, N};
 
 impl Random {
@@ -15,9 +17,11 @@ impl Random {
 
     /// Reverses [`Random::twist`].
     pub fn untwist_verify(state0: &[u32; N], state1: &[u32; N]) {
+        use Version::*;
+
         const M: usize = 397;
 
-        let mut state0 = PartialState::new(*state0);
+        let mut state = PartialState::new(state0, state1);
 
         // (1) Solving for bit 31 of state0[N - 1]:
         //
@@ -27,9 +31,11 @@ impl Random {
         // s1[623] & 0x40000000 == (s1[396] ^ (s0[623] >> 1)) & 0x40000000
         // (s0[623] >> 1) & 0x40000000 == (s1[396] ^ s1[623]) & 0x40000000
         // s0[623] & 0x80000000 == ((s1[396] ^ s1[623]) << 1) & 0x80000000
-        state0.set(N - 1, (state1[M - 1] ^ state1[N - 1]) << 1, 0x80000000);
+        let x = (state.get(M - 1, 0x40000000, S1) ^ state.get(N - 1, 0x40000000, S1)) << 1;
+        state.set(N - 1, x, 0x80000000);
 
-        for i in N - M..N - 1 {
+        // 227..623
+        for i in (N - M..N - 1).rev() {
             // (2) Solving for bit 0 of state0[i + 1]:
             //
             // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
@@ -38,7 +44,8 @@ impl Random {
             // s1[i] & 0x80000000 == (s1[i-(N-M)] ^ (s0[i+1] << 31)) & 0x80000000
             // (s0[i+1] << 31) & 0x80000000 == (s1[i-(N-M)] ^ s1[i]) & 0x80000000
             // s0[i+1] & 0x1 == ((s1[i-(N-M)] ^ s1[i]) >> 31) & 0x1
-            state0.set(i + 1, (state1[i - (N - M)] ^ state1[i]) >> 31, 0x1);
+            let x = (state.get(i - (N - M), 0x80000000, S1) ^ state.get(i, 0x80000000, S1)) >> 31;
+            state.set(i + 1, x, 0x1);
 
             // (3) Solving for bit 31 of state0[i]:
             //
@@ -48,12 +55,13 @@ impl Random {
             // s1[i] & 0x40000000 == (s1[i-(N-M)] ^ (s0[i] >> 1)) & 0x40000000
             // (s0[i] >> 1) & 0x40000000 == (s1[i-(N-M)] ^ s1[i]) & 0x40000000
             // s0[i] & 0x80000000 == ((s1[i-(N-M)] ^ s1[i]) << 1) & 0x80000000
-            state0.set(i, (state1[i - (N - M)] ^ state1[i]) << 1, 0x80000000);
+            let x = (state.get(i - (N - M), 0x40000000, S1) ^ state.get(i, 0x40000000, S1)) << 1;
+            state.set(i, x, 0x80000000);
 
             // (4) Solving for bits 6, 9–12, 15, 17–19, 21–24, 26–27, and 30 of
-            // state0[i + 1]. The mask 0x26f74f20 is !0x9908b0df & !0x40000000,
-            // that is, the zero bits of the magnitude constant, excluding bit
-            // 30 which is handled above.
+            // state0[i + 1]. The mask 0x26f74f20 is
+            // `!0x9908b0df & !0x40000000`, that is, the zero bits of the
+            // magnitude constant, excluding bit 30 which is handled above.
             //
             // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
             // s1[i] & 0x26f74f20 == (s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x26f74f20
@@ -61,8 +69,30 @@ impl Random {
             // s1[i] & 0x26f74f20 == (s1[i-(N-M)] ^ (s0[i+1] >> 1)) & 0x26f74f20
             // (s0[i+1] >> 1) & 0x26f74f20 == (s1[i-(N-M)] ^ s1[i]) & 0x26f74f20
             // s0[i+1] & 0x4dee9e40 == ((s1[i-(N-M)] ^ s1[i]) << 1) & 0x4dee9e40
-            state0.set(i + 1, (state1[i - (N - M)] ^ state1[i]) << 1, 0x4dee9e40);
+            let x = (state.get(i - (N - M), 0x26f74f20, S1) ^ state.get(i, 0x26f74f20, S1)) << 1;
+            state.set(i + 1, x, 0x4dee9e40);
         }
+
+        for i in (0..N - M).rev() {
+            // (5) Solving for bits 10–12, 18–19, 22–24, and 27 of state0[i + 1]
+            // proceeds like (4):
+            //
+            // s1[i] == s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
+            // s1[i] & 0x26f74f20 == (s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x26f74f20
+            // s1[i] & 0x26f74f20 == (s0[i+M] ^ ((s0[i+1] & 0x7ffffffe) >> 1)) & 0x26f74f20
+            // s1[i] & 0x26f74f20 == (s0[i+M] ^ (s0[i+1] >> 1)) & 0x26f74f20
+            // (s0[i+1] >> 1) & 0x26f74f20 == (s0[i+M] ^ s1[i]) & 0x26f74f20
+            // s0[i+1] & 0x4dee9e40 == ((s0[i+M] ^ s1[i]) << 1) & 0x4dee9e40
+            //
+            // However, only the bits in `state[N-M..N-1] & 0x4dee9e40` have
+            // been reversed by (4), while the mask here is
+            // `s0[i+M] & 0x26f74f20`, so we need `0x4dee9e40 & 0x26f74f20`, or
+            // `0x04e60e00`.
+            let x = (state.get(i + M, 0x04e60e00, S0) ^ state.get(i, 0x04e60e00, S1)) << 1;
+            state.set(i + 1, x, 0x04e60e00 << 1);
+        }
+
+        println!("{state:b}");
     }
 
     /// Reverses [`Random::temper`].
@@ -153,32 +183,116 @@ impl Random {
     }
 }
 
-struct PartialState {
+#[derive(Clone, Debug)]
+struct PartialState<'a> {
     values: [u32; N],
-    masks: [u32; N],
-    verify: [u32; N],
+    reversed: [u32; N],
+    state0_verify: &'a [u32; N],
+    state1_verify: &'a [u32; N],
 }
 
-impl PartialState {
-    fn new(verify: [u32; N]) -> Self {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Version {
+    S0,
+    S1,
+}
+
+impl<'a> PartialState<'a> {
+    fn new(state0: &'a [u32; N], state1: &'a [u32; N]) -> Self {
         PartialState {
-            values: [0; N],
-            masks: [0; N],
-            verify,
+            values: *state1,
+            reversed: [0; N],
+            state0_verify: state0,
+            state1_verify: state1,
         }
     }
 
-    #[allow(dead_code)]
-    fn get(&mut self, i: usize, mask: u32) -> u32 {
-        assert!(self.masks[i] & mask == mask);
-        self.values[i] & mask
+    fn get(&mut self, i: usize, mask: u32, version: Version) -> u32 {
+        // The mask and version are just to assert well-formedness and are not
+        // used in the result.
+        assert!(
+            match version {
+                Version::S0 => self.reversed[i] & mask == mask,
+                Version::S1 => !self.reversed[i] & mask == mask,
+            },
+            "[{i}]\n\
+                reversed = {reversed:08x} {reversed:032b}\n\
+                mask     = {mask:08x} {mask:032b}\n\
+                version  = {version:?}",
+            reversed = self.reversed[i],
+        );
+        self.values[i]
     }
 
     fn set(&mut self, i: usize, value: u32, mask: u32) {
-        assert!(self.masks[i] & mask == 0);
-        assert_eq!(value & mask, self.verify[i] & mask);
+        assert!(self.reversed[i] & mask == 0);
+        assert_eq!(value & mask, self.state0_verify[i] & mask);
+        self.values[i] &= !mask;
         self.values[i] |= value & mask;
-        self.masks[i] |= mask;
+        self.reversed[i] |= mask;
+    }
+
+    fn bits_reversed(&self) -> u32 {
+        self.reversed.iter().map(|&mask| mask.count_ones()).sum()
+    }
+
+    fn write_stat(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let reversed = self.bits_reversed();
+        let total = N * 32;
+        let percent = (reversed as f64 / total as f64) * 100.0;
+        writeln!(f, "{reversed} / {total} bits reversed ({percent:.1}%)")
+    }
+}
+
+impl Display for PartialState<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        for i in 0..N {
+            writeln!(
+                f,
+                "[{i:3}]: \
+                    s0 part = {:08x} in {:08x}, \
+                    s1 part = {:08x} in {:08x}, \
+                    mix = {:08x}, \
+                    s0 = {:08x}, \
+                    s1 = {:08x}",
+                self.values[i] & self.reversed[i],
+                self.reversed[i],
+                self.values[i] & !self.reversed[i],
+                !self.reversed[i],
+                self.values[i],
+                self.state0_verify[i],
+                self.state1_verify[i],
+            )?;
+        }
+        self.write_stat(f)
+    }
+}
+
+impl Binary for PartialState<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fn write_part(f: &mut Formatter<'_>, value: u32, mask: u32) -> fmt::Result {
+            for i in (0..32).rev() {
+                if mask & (1 << i) != 0 {
+                    write!(f, "{}", (value >> i) & 1)?;
+                } else {
+                    write!(f, ".")?;
+                }
+            }
+            Ok(())
+        }
+
+        for i in 0..N {
+            write!(f, "[{i:3}]: s0 part = ")?;
+            write_part(f, self.values[i], self.reversed[i])?;
+            write!(f, ", s1 part = ")?;
+            write_part(f, self.values[i], !self.reversed[i])?;
+            writeln!(
+                f,
+                ", mix = {:032b}, s0 = {:032b}, s1 = {:032b}",
+                self.values[i], self.state0_verify[i], self.state1_verify[i],
+            )?;
+        }
+        self.write_stat(f)
     }
 }
 

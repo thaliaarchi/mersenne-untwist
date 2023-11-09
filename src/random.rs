@@ -203,10 +203,7 @@ mod tests {
     #[test]
     fn next_u32() {
         let mut rand = Random::from_array(&[0x123, 0x234, 0x345, 0x456]);
-        let mut outputs = Vec::with_capacity(1000);
-        for _ in 0..1000 {
-            outputs.push(rand.next_u32());
-        }
+        let outputs = (0..1000).map(|_| rand.next_u32()).collect::<Vec<_>>();
         assert_eq!(outputs, U32_OUTPUTS);
     }
 
