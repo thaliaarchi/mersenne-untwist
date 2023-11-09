@@ -1,4 +1,5 @@
 use std::fmt::{self, Display, Formatter};
+use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::{
     BitAnd, BitAndAssign, BitXor, BitXorAssign, Mul, MulAssign, Shl, ShlAssign, Shr, ShrAssign,
@@ -15,9 +16,10 @@ pub enum Bit {
     Xor(Vec<Var>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug)]
 pub struct Var {
-    index_offset: i16,
+    user: u16,
+    index: u16,
     bit: u8,
     version: Version,
 }
@@ -30,10 +32,14 @@ pub enum Version {
 }
 
 impl BV32 {
-    pub fn new(index_offset: isize, version: Version) -> Self {
+    pub fn new(user: usize, index: usize, version: Version) -> Self {
+        BV32::from_iter(|bit| Bit::new_ref(Var::new(user, index, bit, version)))
+    }
+
+    pub fn from_iter(mut f: impl FnMut(usize) -> Bit) -> Self {
         BV32 {
             bits: (0..32)
-                .map(|bit| Bit::new_ref(Var::new(index_offset, bit, version)))
+                .map(|bit| f(bit))
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap(),
@@ -64,22 +70,25 @@ impl Bit {
 }
 
 impl Var {
-    pub fn new(index_offset: isize, bit: usize, version: Version) -> Self {
+    pub fn new(user: usize, index: usize, bit: usize, version: Version) -> Self {
         Var {
-            index_offset: index_offset as i16,
+            user: user as u16,
+            index: index as u16,
             bit: bit as u8,
             version,
         }
     }
 
-    pub fn index(&self, index: usize) -> usize {
-        index
-            .checked_add_signed(self.index_offset as isize)
-            .unwrap()
+    pub fn user(&self) -> usize {
+        self.user as usize
     }
 
-    pub fn index_offset(&self) -> isize {
-        self.index_offset as isize
+    pub fn index(&self) -> usize {
+        self.index as usize
+    }
+
+    pub fn offset(&self) -> isize {
+        self.index as isize - self.user as isize
     }
 
     pub fn bit(&self) -> usize {
@@ -99,13 +108,7 @@ impl From<&BV32> for BV32 {
 
 impl From<u32> for BV32 {
     fn from(value: u32) -> Self {
-        BV32 {
-            bits: (0..32)
-                .map(|i| Bit::from((value >> i) & 1 != 0))
-                .collect::<Vec<_>>()
-                .try_into()
-                .unwrap(),
-        }
+        BV32::from_iter(|i| Bit::from((value >> i) & 1 != 0))
     }
 }
 
@@ -263,10 +266,33 @@ impl BitAnd<bool> for &Bit {
     }
 }
 
+/// Compares using relative offset.
+impl PartialEq for Var {
+    fn eq(&self, other: &Self) -> bool {
+        self.offset() == other.offset() && self.bit == other.bit && self.version == other.version
+    }
+}
+
+impl Eq for Var {}
+
+/// Hashes using relative offset.
+impl Hash for Var {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.offset().hash(state);
+        self.bit.hash(state);
+        self.version.hash(state);
+    }
+}
+
 impl Display for BV32 {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (i, bit) in self.bits.iter().enumerate() {
-            writeln!(f, ".{i} = {bit}")?;
+            write!(f, ".{i} = ")?;
+            if f.sign_plus() {
+                writeln!(f, "{bit:+}")?;
+            } else {
+                writeln!(f, "{bit}")?;
+            }
         }
         Ok(())
     }
@@ -278,9 +304,15 @@ impl Display for Bit {
             Bit::Const(false) => write!(f, "0"),
             Bit::Const(true) => write!(f, "1"),
             Bit::Xor(xs) => {
-                write!(f, "{}", xs[0])?;
-                for x in &xs[1..] {
-                    write!(f, " ^ {x}")?;
+                for (i, x) in xs.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, " ^ ")?;
+                    }
+                    if f.sign_plus() {
+                        write!(f, "{x:+}")?;
+                    } else {
+                        write!(f, "{x}")?;
+                    }
                 }
                 Ok(())
             }
@@ -290,11 +322,13 @@ impl Display for Bit {
 
 impl Display for Var {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "s{}.{:+}.{}",
-            self.version as u8, self.index_offset, self.bit,
-        )
+        write!(f, "s{}.", self.version as u8)?;
+        if f.sign_plus() {
+            write!(f, "{:+}", self.offset())?;
+        } else {
+            write!(f, "{}", self.index)?;
+        }
+        write!(f, ".{}", self.bit)
     }
 }
 

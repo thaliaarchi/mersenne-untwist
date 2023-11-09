@@ -20,7 +20,7 @@ impl<const N: usize> State<N> {
     pub fn new() -> Self {
         State {
             values: (0..N)
-                .map(|i| BV32::new(i as isize, Version::S0))
+                .map(|i| BV32::new(i, i, Version::S0))
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap(),
@@ -28,8 +28,8 @@ impl<const N: usize> State<N> {
         }
     }
 
-    fn get(&self, base: usize, index: usize) -> BV32 {
-        BV32::new(index as isize - base as isize, self.versions[index])
+    fn get(&self, user: usize, index: usize) -> BV32 {
+        BV32::new(user, index, self.versions[index])
     }
 
     fn set(&mut self, index: usize, value: BV32) {
@@ -64,7 +64,7 @@ impl<const N: usize> State<N> {
                                 Version::S0 => state0,
                                 Version::S1 => state1,
                             };
-                            b ^= (s[x.index(i)] >> x.bit()) & 1;
+                            b ^= (s[x.index()] >> x.bit()) & 1;
                         }
                         b
                     }
@@ -157,7 +157,7 @@ impl Display for ValueClasses {
                 }
             }
             writeln!(f, " =")?;
-            writeln!(f, "{v}")?;
+            writeln!(f, "{v:+}")?;
         }
         Ok(())
     }
@@ -206,18 +206,18 @@ mod tests {
         let state1 = [x, y, z];
 
         let x = {
-            let x = BV32::new(0, Version::S0);
-            let y = BV32::new(1, Version::S0);
-            let z = BV32::new(2, Version::S0);
+            let x = BV32::new(0, 0, Version::S0);
+            let y = BV32::new(0, 1, Version::S0);
+            let z = BV32::new(0, 2, Version::S0);
             (((x << 12) ^ y) << 12) ^ z
         };
         let z = {
-            let x = BV32::new(-2, Version::S1);
-            let y = BV32::new(-1, Version::S0);
+            let x = BV32::new(2, 0, Version::S1);
+            let y = BV32::new(2, 1, Version::S0);
             x ^ y
         };
         let y = {
-            let z = BV32::new(1, Version::S1);
+            let z = BV32::new(1, 2, Version::S1);
             ((z >> 3) & 1) * 0x9876543
         };
         let state = State::<3> {
