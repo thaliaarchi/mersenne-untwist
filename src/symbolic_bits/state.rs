@@ -1,12 +1,12 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::symbolic_bits::{Graph, Version, BV32};
+use crate::symbolic_bits::{Bit, Version, BV32};
 use crate::{M, N};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct State {
-    pub(crate) values: Box<[BV32; N]>,
-    pub(crate) versions: Box<[Version; N]>,
+    values: Box<[BV32; N]>,
+    versions: Box<[Version; N]>,
 }
 
 impl State {
@@ -19,10 +19,6 @@ impl State {
                 .unwrap(),
             versions: vec![Version::S0; N].try_into().unwrap(),
         }
-    }
-
-    pub fn graph(&self) -> Graph {
-        Graph::from_state(self)
     }
 
     fn get(&self, index: usize, offset: isize) -> BV32 {
@@ -71,8 +67,31 @@ impl State {
 
 impl Display for State {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for (i, v) in self.values.iter().enumerate() {
-            writeln!(f, "[{i}]:\n{v}")?;
+        if f.alternate() {
+            writeln!(f, "digraph mt19937_state {{")?;
+            for (i, v) in self.values.iter().enumerate() {
+                for (j, bit) in v.bits.iter().enumerate() {
+                    match bit {
+                        Bit::Const(true) => {
+                            writeln!(f, "    \"s1.{i}.{j}\" -> const0;")?;
+                        }
+                        Bit::Const(false) => {
+                            writeln!(f, "    \"s1.{i}.{j}\" -> const1;")?;
+                        }
+                        Bit::Xor(xs) => {
+                            for var in xs {
+                                writeln!(f, "    \"s1.{i}.{j}\" -> \"{var}\";")?;
+                            }
+                        }
+                    }
+                }
+                writeln!(f)?;
+            }
+            writeln!(f, "}}")?;
+        } else {
+            for (i, v) in self.values.iter().enumerate() {
+                writeln!(f, "[{i}]:\n{v}")?;
+            }
         }
         Ok(())
     }

@@ -11,8 +11,7 @@ pub struct BV32 {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Bit {
     Const(bool),
-    Ref(Var),
-    Xor(Box<Bit>, Box<Bit>),
+    Xor(Vec<Var>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -33,11 +32,17 @@ impl BV32 {
     pub fn new(index_offset: isize, version: Version) -> Self {
         BV32 {
             bits: (0..32)
-                .map(|bit| Bit::Ref(Var::new(index_offset, bit, version)))
+                .map(|bit| Bit::new_ref(Var::new(index_offset, bit, version)))
                 .collect::<Vec<_>>()
                 .try_into()
                 .unwrap(),
         }
+    }
+}
+
+impl Bit {
+    pub fn new_ref(var: Var) -> Self {
+        Bit::Xor(vec![var])
     }
 }
 
@@ -156,11 +161,14 @@ impl BitXor for Bit {
     type Output = Bit;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        match (&self, &rhs) {
+        match (self, rhs) {
             (Bit::Const(x), Bit::Const(y)) => Bit::Const(x != y),
-            (_, Bit::Const(false)) => self,
-            (Bit::Const(false), _) => rhs,
-            _ => Bit::Xor(Box::new(self), Box::new(rhs)),
+            (x, Bit::Const(false)) | (Bit::Const(false), x) => x,
+            (Bit::Xor(mut xs), Bit::Xor(ys)) => {
+                xs.extend_from_slice(&ys);
+                Bit::Xor(xs)
+            }
+            _ => unimplemented!("bit complement"),
         }
     }
 }
@@ -203,8 +211,14 @@ impl Display for Bit {
         match self {
             Bit::Const(false) => write!(f, "0"),
             Bit::Const(true) => write!(f, "1"),
-            Bit::Ref(v) => write!(f, "{v}"),
-            Bit::Xor(x, y) => write!(f, "{x} ^ {y}"),
+            Bit::Xor(xs) => {
+                let (x, xs) = xs.split_first().unwrap();
+                write!(f, "{x}")?;
+                for x in xs {
+                    write!(f, " ^ {x}")?;
+                }
+                Ok(())
+            }
         }
     }
 }
