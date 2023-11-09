@@ -1,12 +1,12 @@
 use std::fmt::{self, Display, Formatter};
 
-use crate::symbolic_bits::{Version, BV32};
+use crate::symbolic_bits::{Graph, Version, BV32};
 use crate::{M, N};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct State {
-    values: Box<[BV32; N]>,
-    versions: Box<[Version; N]>,
+    pub(crate) values: Box<[BV32; N]>,
+    pub(crate) versions: Box<[Version; N]>,
 }
 
 impl State {
@@ -19,6 +19,10 @@ impl State {
                 .unwrap(),
             versions: vec![Version::S0; N].try_into().unwrap(),
         }
+    }
+
+    pub fn graph(&self) -> Graph {
+        Graph::from_state(self)
     }
 
     fn get(&self, index: usize) -> BV32 {

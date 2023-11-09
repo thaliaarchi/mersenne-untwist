@@ -5,7 +5,7 @@ use std::ops::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BV32 {
-    bits: Box<[Bit; 32]>,
+    pub(super) bits: Box<[Bit; 32]>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
