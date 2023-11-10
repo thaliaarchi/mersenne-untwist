@@ -21,8 +21,19 @@ impl Random {
 
         let mut state = PartialState::new(state0, state1);
 
+        // (1) Solving for bit 31 of state0[N - 1]:
+        //
+        // s1[N-1] == s1[M-1] ^ ((s0[N-1] & 0x80000000) >> 1) ^ ((s1[0] & 0x7ffffffe) >> 1) ^ ((s1[0] & 0x1) * 0x9908b0df)
+        // s1[N-1] & 0x40000000 == (s1[M-1] ^ ((s0[N-1] & 0x80000000) >> 1) ^ ((s1[0] & 0x7ffffffe) >> 1) ^ ((s1[0] & 0x1) * 0x9908b0df)) & 0x40000000
+        // s1[N-1] & 0x40000000 == (s1[M-1] ^ ((s0[N-1] & 0x80000000) >> 1)) & 0x40000000
+        // s1[N-1] & 0x40000000 == (s1[M-1] ^ (s0[N-1] >> 1)) & 0x40000000
+        // (s0[N-1] >> 1) & 0x40000000 == (s1[M-1] ^ s1[N-1]) & 0x40000000
+        // s0[N-1] & 0x80000000 == ((s1[M-1] ^ s1[N-1]) << 1) & 0x80000000
+        let msb = (state.get(M - 1, 0x40000000, S1) ^ state.get(N - 1, 0x40000000, S1)) << 1;
+        state.set(N - 1, msb, 0x80000000);
+
         for i in (N - M..N - 1).rev() {
-            // (1) Solving for bit 0 of state0[i + 1]:
+            // (2) Solving for bit 0 of state0[i + 1]:
             //
             // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
             // s1[i] & 0x80000000 == (s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x80000000
@@ -32,7 +43,7 @@ impl Random {
             // s0[i+1] & 0x1 == ((s1[i-(N-M)] ^ s1[i]) >> 31) & 0x1
             let lsb = (state.get(i - (N - M), 0x80000000, S1) ^ state.get(i, 0x80000000, S1)) >> 31;
 
-            // (2) Solving for bit 31 of state0[i]:
+            // (3) Solving for bit 31 of state0[i]:
             //
             // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
             // s1[i] & 0x40000000 == (s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x40000000
@@ -40,24 +51,10 @@ impl Random {
             // s1[i] & 0x40000000 == (s1[i-(N-M)] ^ (s0[i] >> 1)) & 0x40000000
             // (s0[i] >> 1) & 0x40000000 == (s1[i-(N-M)] ^ s1[i]) & 0x40000000
             // s0[i] & 0x80000000 == ((s1[i-(N-M)] ^ s1[i]) << 1) & 0x80000000
-            //
-            // Solving for bit 31 of state0[N - 1]:
-            //
-            // s1[N-1] == s1[M-1] ^ ((s0[N-1] & 0x80000000) >> 1) ^ ((s1[0] & 0x7ffffffe) >> 1) ^ ((s1[0] & 0x1) * 0x9908b0df)
-            // s1[N-1] & 0x40000000 == (s1[M-1] ^ ((s0[N-1] & 0x80000000) >> 1) ^ ((s1[0] & 0x7ffffffe) >> 1) ^ ((s1[0] & 0x1) * 0x9908b0df)) & 0x40000000
-            // s1[N-1] & 0x40000000 == (s1[M-1] ^ ((s0[N-1] & 0x80000000) >> 1)) & 0x40000000
-            // s1[N-1] & 0x40000000 == (s1[M-1] ^ (s0[N-1] >> 1)) & 0x40000000
-            // (s0[N-1] >> 1) & 0x40000000 == (s1[M-1] ^ s1[N-1]) & 0x40000000
-            // s0[N-1] & 0x80000000 == ((s1[M-1] ^ s1[N-1]) << 1) & 0x80000000
-            //
-            // The two are equivalent and the state0[N - 1] case extends the
-            // range of the state0[i] case by 1, so i can be substituted with
-            // `i + 1`.
-            let msb = (state.get(i - (N - M) + 1, 0x40000000, S1)
-                ^ state.get(i + 1, 0x40000000, S1))
-                << 1;
+            let msb = (state.get(i - (N - M), 0x40000000, S1) ^ state.get(i, 0x40000000, S1)) << 1;
+            state.set(i, msb, 0x80000000);
 
-            // (3) Solving for bits 1..=30 of state0[i + 1]:
+            // (4) Solving for bits 1..=30 of state0[i + 1]:
             //
             // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
             // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)
@@ -69,11 +66,11 @@ impl Random {
                 ^ state.get(i, 0x3fffffff, S1)
                 ^ (lsb * 0x9908b0df))
                 << 1;
-            state.set(i + 1, msb | mid | lsb, 0xffffffff);
+            state.set(i + 1, mid | lsb, 0x7fffffff);
         }
 
         for i in (0..N - M).rev() {
-            // (4) Solving for bit 0 of state0[i + 1]. This is identical to (1),
+            // (5) Solving for bit 0 of state0[i + 1]. This is identical to (2),
             // except it uses s0[i+M], in place of s1[i-(N-M)].
             //
             // s1[i] == s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
@@ -87,8 +84,8 @@ impl Random {
             let msb = (state.get(i + M, 0x40000000, S0) ^ state.get(i, 0x40000000, S1)) << 1;
             state.set(i, msb, 0x80000000);
 
-            // (5) Solving for bits 1..=30 of state0[i + 1]. This is identical
-            // to (3), except it uses s0[i+M], in place of s1[i-(N-M)].
+            // (6) Solving for bits 1..=30 of state0[i + 1]. This is identical
+            // to (4), except it uses s0[i+M], in place of s1[i-(N-M)].
             //
             // s1[i] == s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
             // s1[i] == s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)
