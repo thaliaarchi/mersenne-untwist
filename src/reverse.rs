@@ -17,6 +17,9 @@ impl Random {
 
     /// Reverses [`Random::twist`]. All bits, except for `state[0] & 0x7fffffff`
     /// can be recovered.
+    ///
+    /// See the documentation of [`Random::twist`] for a discussion of why it is
+    /// in a different form from the original implementation.
     pub fn untwist(&mut self) {
         let state = &mut self.state;
         for i in (0..N).rev() {
@@ -58,17 +61,17 @@ impl Random {
 
     /// Reverses [`Random::temper`].
     pub fn untemper(mut x: u32) -> u32 {
-        // Reverse `x ^= x >> 18;`
+        // Reverse `x ^= x >> 18`
         x ^= x >> 18;
-        // Reverse `x ^= (x << 15) & 0xefc60000;`
+        // Reverse `x ^= (x << 15) & 0xefc60000`
         x ^= (x << 15) & 0x2fc60000;
         x ^= (x << 15) & 0xc0000000;
-        // Reverse `x ^= (x << 7) & 0x9d2c5680;`
+        // Reverse `x ^= (x << 7) & 0x9d2c5680`
         x ^= (x << 7) & 0x00001680;
         x ^= (x << 7) & 0x000c4000;
         x ^= (x << 7) & 0x0d200000;
         x ^= (x << 7) & 0x90000000;
-        // Reverse `x ^= x >> 11;`
+        // Reverse `x ^= x >> 11`
         x ^= x >> 11;
         x ^= x >> 22;
         x

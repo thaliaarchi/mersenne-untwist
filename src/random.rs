@@ -120,26 +120,28 @@ impl Random {
         &self.state
     }
 
+    /// Generates the next `N` values of the series.
+    ///
     /// # Algorithm
     ///
     /// The twist transformation in the standard implementation has several
     /// details, that make a reversal less straightforward. Here I step through
     /// simplifying it, while maintaining its semantics. First, I start with a
-    /// direct Rust translation of the [original C code](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L114-L123),
+    /// direct Rust translation of the [reference C code](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L114-L123),
     /// making only minor adjustments:
     ///
     /// ```rust,ignore
     /// static MAG01: [u32; 2] = [0x0, 0x9908b0df];
     /// for i in 0..N - M {
-    ///     let y = (state[i] & 0x80000000) | (state[i + 1] & 0x7fffffff);
-    ///     state[i] = state[i + M] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
+    ///     let x = (state[i] & 0x80000000) | (state[i + 1] & 0x7fffffff);
+    ///     state[i] = state[i + M] ^ (x >> 1) ^ MAG01[(x & 0x1) as usize];
     /// }
     /// for i in N - M..N - 1 {
-    ///     let y = (state[i] & 0x80000000) | (state[i + 1] & 0x7fffffff);
-    ///     state[i] = state[i - (N - M)] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
+    ///     let x = (state[i] & 0x80000000) | (state[i + 1] & 0x7fffffff);
+    ///     state[i] = state[i - (N - M)] ^ (x >> 1) ^ MAG01[(x & 0x1) as usize];
     /// }
-    /// let y = (state[N - 1] & 0x80000000) | (state[0] & 0x7fffffff);
-    /// state[N - 1] = state[M - 1] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
+    /// let x = (state[N - 1] & 0x80000000) | (state[0] & 0x7fffffff);
+    /// state[N - 1] = state[M - 1] ^ (x >> 1) ^ MAG01[(x & 0x1) as usize];
     /// ```
     ///
     /// The transformation is split into three parts, each mapping a different
@@ -150,12 +152,12 @@ impl Random {
     /// ```rust,ignore
     /// static MAG01: [u32; 2] = [0x0, 0x9908b0df];
     /// for i in 0..N {
-    ///     let y = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7fffffff);
-    ///     state[i] = state[(i + M) % N] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
+    ///     let x = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7fffffff);
+    ///     state[i] = state[(i + M) % N] ^ (x >> 1) ^ MAG01[(x & 0x1) as usize];
     /// }
     /// ```
     ///
-    /// The magnitude expression `MAG01[(y & 0x1) as usize]` stands out as an
+    /// The magnitude expression `MAG01[(x & 0x1) as usize]` stands out as an
     /// array operation among the bitwise operations. It extracts the
     /// least-significant bit and, if it is one, yields the constant
     /// `0x9908b0df`, named `MATRIX_A` in the original. Let's replace it with a
@@ -163,30 +165,51 @@ impl Random {
     ///
     /// ```rust,ignore
     /// for i in 0..N {
-    ///     let y = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7fffffff);
-    ///     state[i] = state[(i + M) % N] ^ (y >> 1) ^ ((y & 0x1) * 0x9908b0df);
+    ///     let x = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7fffffff);
+    ///     state[i] = state[(i + M) % N] ^ (x >> 1) ^ ((x & 0x1) * 0x9908b0df);
     /// }
     /// ```
     ///
     /// There are masks to extract the most-significant bit (`0x80000000`), all
     /// the other bits (`0x7fffffff`), and the least-significant bit (`0x1`),
     /// but they over-approximate. Let's narrow them to make analysis easier.
-    /// Only the MSB of `state[i]` is used in `y`, so `y & 0x1` does not depend
-    /// on it and can be reduced to `state[(i + 1) % N] & 0x1`. With `y` only
-    /// used once now, its LSB is shifted out in `y >> 1`, so its mask can be
+    /// Only the MSB of `state[i]` is used in `x`, so `x & 0x1` does not depend
+    /// on it and can be reduced to `state[(i + 1) % N] & 0x1`. With `x` only
+    /// used once now, its LSB is shifted out in `x >> 1`, so its mask can be
     /// changed to `0x7ffffffe`.
     ///
     /// ```rust,ignore
     /// for i in 0..N {
-    ///     let y = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7ffffffe);
-    ///     state[i] = state[(i + M) % N] ^ (y >> 1) ^ ((state[(i + 1) % N] & 0x1) * 0x9908b0df);
+    ///     let x = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7ffffffe);
+    ///     state[i] = state[(i + M) % N] ^ (x >> 1) ^ ((state[(i + 1) % N] & 0x1) * 0x9908b0df);
     /// }
     /// ```
+    ///
+    /// For the typical forward direction, I think this is the most clear
+    /// version.
+    ///
+    /// When running the algorithm in reverse, further transformations are
+    /// useful. XOR is its symmetric, so it cancels out when applied twice,
+    /// reversing the operation. Since the bits of the masks `0x80000000` and
+    /// `0x7ffffffe` are mutually exclusive, their OR is equivalent to XOR.
+    /// Then, with the right shift distributed in `x`, it becomes a top-level
+    /// XOR of bitwise operations on single variables:
+    ///
+    /// ```rust,ignore
+    /// for i in 0..N {
+    ///     state[i] = state[(i + M) % N]
+    ///         ^ ((state[i] & 0x80000000) >> 1)
+    ///         ^ ((state[(i + 1) % N] & 0x7ffffffe) >> 1)
+    ///         ^ ((state[(i + 1) % N] & 0x1) * 0x9908b0df);
+    /// }
+    /// ```
+    ///
+    /// I use this form in [`Random::untwist`] (reversed) and the various
+    /// abstract state representations.
     pub fn twist(&mut self) {
         #[cfg(test)]
         let state0 = self.state;
 
-        // Generate N words at one time
         let state = &mut self.state;
         for i in 0..N {
             let y = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7ffffffe);
