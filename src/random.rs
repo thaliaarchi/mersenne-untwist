@@ -120,6 +120,68 @@ impl Random {
         &self.state
     }
 
+    /// # Algorithm
+    ///
+    /// The twist transformation in the standard implementation has several
+    /// details, that make a reversal less straightforward. Here I step through
+    /// simplifying it, while maintaining its semantics. First, I start with a
+    /// direct Rust translation of the [original C code](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L114-L123),
+    /// making only minor adjustments:
+    ///
+    /// ```rust,ignore
+    /// static MAG01: [u32; 2] = [0x0, 0x9908b0df];
+    /// for i in 0..N - M {
+    ///     let y = (state[i] & 0x80000000) | (state[i + 1] & 0x7fffffff);
+    ///     state[i] = state[i + M] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
+    /// }
+    /// for i in N - M..N - 1 {
+    ///     let y = (state[i] & 0x80000000) | (state[i + 1] & 0x7fffffff);
+    ///     state[i] = state[i - (N - M)] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
+    /// }
+    /// let y = (state[N - 1] & 0x80000000) | (state[0] & 0x7fffffff);
+    /// state[N - 1] = state[M - 1] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
+    /// ```
+    ///
+    /// The transformation is split into three parts, each mapping a different
+    /// part of the state array. It manually wraps each of the indices, so they
+    /// are always less than `N`, but this can be more clearly expressed with
+    /// modulo:
+    ///
+    /// ```rust,ignore
+    /// static MAG01: [u32; 2] = [0x0, 0x9908b0df];
+    /// for i in 0..N {
+    ///     let y = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7fffffff);
+    ///     state[i] = state[(i + M) % N] ^ (y >> 1) ^ MAG01[(y & 0x1) as usize];
+    /// }
+    /// ```
+    ///
+    /// The magnitude expression `MAG01[(y & 0x1) as usize]` stands out as an
+    /// array operation among the bitwise operations. It extracts the
+    /// least-significant bit and, if it is one, yields the constant
+    /// `0x9908b0df`, named `MATRIX_A` in the original. Let's replace it with a
+    /// multiply:
+    ///
+    /// ```rust,ignore
+    /// for i in 0..N {
+    ///     let y = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7fffffff);
+    ///     state[i] = state[(i + M) % N] ^ (y >> 1) ^ ((y & 0x1) * 0x9908b0df);
+    /// }
+    /// ```
+    ///
+    /// There are masks to extract the most-significant bit (`0x80000000`), all
+    /// the other bits (`0x7fffffff`), and the least-significant bit (`0x1`),
+    /// but they over-approximate. Let's narrow them to make analysis easier.
+    /// Only the MSB of `state[i]` is used in `y`, so `y & 0x1` does not depend
+    /// on it and can be reduced to `state[(i + 1) % N] & 0x1`. With `y` only
+    /// used once now, its LSB is shifted out in `y >> 1`, so its mask can be
+    /// changed to `0x7ffffffe`.
+    ///
+    /// ```rust,ignore
+    /// for i in 0..N {
+    ///     let y = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7ffffffe);
+    ///     state[i] = state[(i + M) % N] ^ (y >> 1) ^ ((state[(i + 1) % N] & 0x1) * 0x9908b0df);
+    /// }
+    /// ```
     pub fn twist(&mut self) {
         #[cfg(test)]
         let state0 = self.state;
