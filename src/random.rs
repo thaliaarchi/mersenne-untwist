@@ -5,7 +5,7 @@ pub(crate) const M: usize = 397;
 ///
 /// Corresponds to the [`mt` and `mti`](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L53-L54)
 /// state.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Random {
     /// The array for the state vector.
     pub(crate) state: [u32; N],
@@ -140,7 +140,7 @@ impl Random {
         state[N - 1] = state[M - 1] ^ (y >> 1) ^ ((state[0] & 0x1) * MATRIX_A);
 
         #[cfg(test)]
-        Random::untwist_verify(&state0, &self.state);
+        self.untwist_verify(&state0);
     }
 
     pub fn temper(mut x: u32) -> u32 {

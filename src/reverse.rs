@@ -15,12 +15,9 @@ impl Random {
         Some(self.state[0])
     }
 
-    /// Reverses [`Random::twist`].
-    pub fn untwist_verify(state0: &[u32; N], state1: &[u32; N]) {
-        use Version::*;
-
-        let mut state = PartialState::new(state0, state1);
-
+    /// Reverses [`Random::twist`]. All bits, except for `state[0] & 0x7fffffff`
+    /// can be recovered.
+    pub fn untwist(&mut self) {
         // (1) Solving for bit 31 of state0[N - 1]:
         //
         // s1[N-1] == s1[M-1] ^ ((s0[N-1] & 0x80000000) >> 1) ^ ((s1[0] & 0x7ffffffe) >> 1) ^ ((s1[0] & 0x1) * 0x9908b0df)
@@ -29,8 +26,8 @@ impl Random {
         // s1[N-1] & 0x40000000 == (s1[M-1] ^ (s0[N-1] >> 1)) & 0x40000000
         // (s0[N-1] >> 1) & 0x40000000 == (s1[M-1] ^ s1[N-1]) & 0x40000000
         // s0[N-1] & 0x80000000 == ((s1[M-1] ^ s1[N-1]) << 1) & 0x80000000
-        let msb = (state.get(M - 1, 0x40000000, S1) ^ state.get(N - 1, 0x40000000, S1)) << 1;
-        state.set(N - 1, msb, 0x80000000);
+        let msb = ((self.state[M - 1] ^ self.state[N - 1]) << 1) & 0x80000000;
+        self.state[N - 1] = msb | (self.state[N - 1] & !0x80000000);
 
         for i in (N - M..N - 1).rev() {
             // (2) Solving for bit 0 of state0[i + 1]:
@@ -41,7 +38,7 @@ impl Random {
             // s1[i] & 0x80000000 == (s1[i-(N-M)] ^ (s0[i+1] << 31)) & 0x80000000
             // (s0[i+1] << 31) & 0x80000000 == (s1[i-(N-M)] ^ s1[i]) & 0x80000000
             // s0[i+1] & 0x1 == ((s1[i-(N-M)] ^ s1[i]) >> 31) & 0x1
-            let lsb = (state.get(i - (N - M), 0x80000000, S1) ^ state.get(i, 0x80000000, S1)) >> 31;
+            let lsb = (self.state[i - (N - M)] ^ self.state[i]) >> 31;
 
             // (3) Solving for bit 31 of state0[i]:
             //
@@ -51,8 +48,8 @@ impl Random {
             // s1[i] & 0x40000000 == (s1[i-(N-M)] ^ (s0[i] >> 1)) & 0x40000000
             // (s0[i] >> 1) & 0x40000000 == (s1[i-(N-M)] ^ s1[i]) & 0x40000000
             // s0[i] & 0x80000000 == ((s1[i-(N-M)] ^ s1[i]) << 1) & 0x80000000
-            let msb = (state.get(i - (N - M), 0x40000000, S1) ^ state.get(i, 0x40000000, S1)) << 1;
-            state.set(i, msb, 0x80000000);
+            let msb = ((self.state[i - (N - M)] ^ self.state[i]) << 1) & 0x80000000;
+            self.state[i] = msb | (self.state[i] & !0x80000000);
 
             // (4) Solving for bits 1..=30 of state0[i + 1]:
             //
@@ -62,11 +59,9 @@ impl Random {
             // s1[i] & 0x3fffffff == (s1[i-(N-M)] ^ (s0[i+1] >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
             // (s0[i+1] >> 1) & 0x3fffffff == (s1[i-(N-M)] ^ s1[i] ^ (lsb * 0x9908b0df)) & 0x3fffffff
             // s0[i+1] & 0x7ffffffe == ((s1[i-(N-M)] ^ s1[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7ffffffe
-            let mid = (state.get(i - (N - M), 0x3fffffff, S1)
-                ^ state.get(i, 0x3fffffff, S1)
-                ^ (lsb * 0x9908b0df))
-                << 1;
-            state.set(i + 1, mid | lsb, 0x7fffffff);
+            let mid =
+                ((self.state[i - (N - M)] ^ self.state[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7fffffff;
+            self.state[i + 1] = mid | lsb | (self.state[i + 1] & !0x7fffffff);
         }
 
         for i in (0..N - M).rev() {
@@ -79,10 +74,10 @@ impl Random {
             // s1[i] & 0x80000000 == (s0[i+M] ^ (s0[i+1] << 31)) & 0x80000000
             // (s0[i+1] << 31) & 0x80000000 == (s0[i+M] ^ s1[i]) & 0x80000000
             // s0[i+1] & 0x1 == ((s0[i+M] ^ s1[i]) >> 31) & 0x1
-            let lsb = (state.get(i + M, 0x80000000, S0) ^ state.get(i, 0x80000000, S1)) >> 31;
+            let lsb = (self.state[i + M] ^ self.state[i]) >> 31;
 
-            let msb = (state.get(i + M, 0x40000000, S0) ^ state.get(i, 0x40000000, S1)) << 1;
-            state.set(i, msb, 0x80000000);
+            let msb = ((self.state[i + M] ^ self.state[i]) << 1) & 0x80000000;
+            self.state[i] = msb | (self.state[i] & !0x80000000);
 
             // (6) Solving for bits 1..=30 of state0[i + 1]. This is identical
             // to (4), except it uses s0[i+M], in place of s1[i-(N-M)].
@@ -93,14 +88,35 @@ impl Random {
             // s1[i] & 0x3fffffff == (s0[i+M] ^ (s0[i+1] >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
             // (s0[i+1] >> 1) & 0x3fffffff == (s0[i+M] ^ s1[i] ^ (lsb * 0x9908b0df)) & 0x3fffffff
             // s0[i+1] & 0x7ffffffe == ((s0[i+M] ^ s1[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7ffffffe
-            let mid = (state.get(i + M, 0x3fffffff, S0)
-                ^ state.get(i, 0x3fffffff, S1)
-                ^ (lsb * 0x9908b0df))
-                << 1;
-            state.set(i + 1, mid | lsb, 0x7fffffff);
+            let mid = ((self.state[i + M] ^ self.state[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7ffffffe;
+            self.state[i + 1] = mid | lsb | (self.state[i + 1] & !0x7fffffff);
         }
+    }
 
-        println!("{state:b}");
+    #[cfg(test)]
+    pub(super) fn untwist_verify(&self, state0: &[u32; N]) {
+        let mut s = self.clone();
+
+        s.untwist();
+
+        let mut fail = false;
+        if s.state[0] & 0x80000000 != state0[0] & 0x80000000 {
+            println!(
+                "[0  ]: {}??????????????????????????????? {:032b}",
+                s.state[0] >> 31,
+                state0[0],
+            );
+            fail = true;
+        }
+        for i in 1..N {
+            if s.state[i] != state0[i] {
+                println!("[{i:3}]: {:032b} {:032b}", s.state[i], state0[i]);
+                fail = true;
+            }
+        }
+        if fail {
+            panic!("untwisted state (left) differs from initial state (right)");
+        }
     }
 
     /// Reverses [`Random::temper`].
@@ -191,6 +207,7 @@ impl Random {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct PartialState<'a> {
     values: [u32; N],
@@ -199,12 +216,14 @@ struct PartialState<'a> {
     state1_verify: &'a [u32; N],
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Version {
     S0,
     S1,
 }
 
+#[allow(dead_code)]
 impl<'a> PartialState<'a> {
     fn new(state0: &'a [u32; N], state1: &'a [u32; N]) -> Self {
         PartialState {
