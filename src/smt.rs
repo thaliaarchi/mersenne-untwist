@@ -66,25 +66,17 @@ impl Z3Random {
 
     fn twist(&mut self) {
         let matrix_a = &U32::from(0x9908b0df);
-        let upper_mask = &U32::from(0x80000000);
-        let lower_mask = &U32::from(0x7ffffffe);
+        let msb_mask = &U32::from(0x80000000);
+        let mid_mask = &U32::from(0x7ffffffe);
         let zero = &U32::from(0);
         let one = &U32::from(1);
 
         let state = &mut self.state;
-        for k in 0..N - M {
-            let y = (&state[k] & upper_mask) | (&state[k + 1] & lower_mask);
-            let mag = U32::ite(&(&state[k + 1] & one).equals(zero), zero, matrix_a);
-            state[k] = (&state[k + M] ^ (y >> one) ^ mag).simplify();
+        for k in 0..N {
+            let y = (&state[k] & msb_mask) | (&state[(k + 1) % N] & mid_mask);
+            let mag = U32::ite(&(&state[(k + 1) % N] & one).equals(zero), zero, matrix_a);
+            state[k] = (&state[(k + M) % N] ^ (y >> one) ^ mag).simplify();
         }
-        for k in N - M..N - 1 {
-            let y = (&state[k] & upper_mask) | (&state[k + 1] & lower_mask);
-            let mag = U32::ite(&(&state[k + 1] & one).equals(zero), zero, matrix_a);
-            state[k] = (&state[k - (N - M)] ^ (y >> one) ^ mag).simplify();
-        }
-        let y = (&state[N - 1] & upper_mask) | (&state[0] & lower_mask);
-        let mag = U32::ite(&(&state[0] & one).equals(zero), zero, matrix_a);
-        state[N - 1] = (&state[M - 1] ^ (y >> one) ^ mag).simplify();
     }
 
     pub fn temper(mut x: U32) -> U32 {

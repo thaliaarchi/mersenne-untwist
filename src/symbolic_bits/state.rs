@@ -78,25 +78,13 @@ impl<const N: usize> State<N> {
 
 impl State<N> {
     pub fn twist(&mut self) {
-        for i in 0..N - M {
-            let v = self.get(i, i + M)
-                ^ ((self.get(i, i) & 0x80000000) >> 1)
-                ^ ((self.get(i, i + 1) & 0x7ffffffe) >> 1)
-                ^ ((self.get(i, i + 1) & 0x1) * 0x9908b0df);
-            self.set(i, v);
+        for i in 0..N {
+            let x = self.get(i, (i + M) % N)
+                ^ ((self.get(i, i % N) & 0x80000000) >> 1)
+                ^ ((self.get(i, (i + 1) % N) & 0x7ffffffe) >> 1)
+                ^ ((self.get(i, (i + 1) % N) & 0x1) * 0x9908b0df);
+            self.set(i, x);
         }
-        for i in N - M..N - 1 {
-            let v = self.get(i, i - (N - M))
-                ^ ((self.get(i, i) & 0x80000000) >> 1)
-                ^ ((self.get(i, i + 1) & 0x7ffffffe) >> 1)
-                ^ ((self.get(i, i + 1) & 0x1) * 0x9908b0df);
-            self.set(i, v);
-        }
-        let v = self.get(N - 1, M - 1)
-            ^ ((self.get(N - 1, N - 1) & 0x80000000) >> 1)
-            ^ ((self.get(N - 1, 0) & 0x7ffffffe) >> 1)
-            ^ ((self.get(N - 1, 0) & 0x1) * 0x9908b0df);
-        self.set(N - 1, v);
     }
 }
 
