@@ -121,23 +121,15 @@ impl Random {
     }
 
     pub fn twist(&mut self) {
-        const MATRIX_A: u32 = 0x9908b0df;
-
         #[cfg(test)]
         let state0 = self.state;
 
         // Generate N words at one time
         let state = &mut self.state;
-        for i in 0..N - M {
-            let y = (state[i] & 0x80000000) | (state[i + 1] & 0x7ffffffe);
-            state[i] = state[i + M] ^ (y >> 1) ^ ((state[i + 1] & 0x1) * MATRIX_A);
+        for i in 0..N {
+            let y = (state[i] & 0x80000000) | (state[(i + 1) % N] & 0x7ffffffe);
+            state[i] = state[(i + M) % N] ^ (y >> 1) ^ ((state[(i + 1) % N] & 0x1) * 0x9908b0df);
         }
-        for i in N - M..N - 1 {
-            let y = (state[i] & 0x80000000) | (state[i + 1] & 0x7ffffffe);
-            state[i] = state[i - (N - M)] ^ (y >> 1) ^ ((state[i + 1] & 0x1) * MATRIX_A);
-        }
-        let y = (state[N - 1] & 0x80000000) | (state[0] & 0x7ffffffe);
-        state[N - 1] = state[M - 1] ^ (y >> 1) ^ ((state[0] & 0x1) * MATRIX_A);
 
         #[cfg(test)]
         self.untwist_verify(&state0);

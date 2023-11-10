@@ -18,78 +18,15 @@ impl Random {
     /// Reverses [`Random::twist`]. All bits, except for `state[0] & 0x7fffffff`
     /// can be recovered.
     pub fn untwist(&mut self) {
-        // (1) Solving for bit 31 of state0[N - 1]:
-        //
-        // s1[N-1] == s1[M-1] ^ ((s0[N-1] & 0x80000000) >> 1) ^ ((s1[0] & 0x7ffffffe) >> 1) ^ ((s1[0] & 0x1) * 0x9908b0df)
-        // s1[N-1] & 0x40000000 == (s1[M-1] ^ ((s0[N-1] & 0x80000000) >> 1) ^ ((s1[0] & 0x7ffffffe) >> 1) ^ ((s1[0] & 0x1) * 0x9908b0df)) & 0x40000000
-        // s1[N-1] & 0x40000000 == (s1[M-1] ^ ((s0[N-1] & 0x80000000) >> 1)) & 0x40000000
-        // s1[N-1] & 0x40000000 == (s1[M-1] ^ (s0[N-1] >> 1)) & 0x40000000
-        // (s0[N-1] >> 1) & 0x40000000 == (s1[M-1] ^ s1[N-1]) & 0x40000000
-        // s0[N-1] & 0x80000000 == ((s1[M-1] ^ s1[N-1]) << 1) & 0x80000000
-        let msb = ((self.state[M - 1] ^ self.state[N - 1]) << 1) & 0x80000000;
-        self.state[N - 1] = msb | (self.state[N - 1] & !0x80000000);
-
-        for i in (N - M..N - 1).rev() {
-            // (2) Solving for bit 0 of state0[i + 1]:
-            //
-            // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
-            // s1[i] & 0x80000000 == (s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x80000000
-            // s1[i] & 0x80000000 == (s1[i-(N-M)] ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x80000000
-            // s1[i] & 0x80000000 == (s1[i-(N-M)] ^ (s0[i+1] << 31)) & 0x80000000
-            // (s0[i+1] << 31) & 0x80000000 == (s1[i-(N-M)] ^ s1[i]) & 0x80000000
-            // s0[i+1] & 0x1 == ((s1[i-(N-M)] ^ s1[i]) >> 31) & 0x1
-            let lsb = (self.state[i - (N - M)] ^ self.state[i]) >> 31;
-
-            // (3) Solving for bit 31 of state0[i]:
-            //
-            // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
-            // s1[i] & 0x40000000 == (s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x40000000
-            // s1[i] & 0x40000000 == (s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1)) & 0x40000000
-            // s1[i] & 0x40000000 == (s1[i-(N-M)] ^ (s0[i] >> 1)) & 0x40000000
-            // (s0[i] >> 1) & 0x40000000 == (s1[i-(N-M)] ^ s1[i]) & 0x40000000
-            // s0[i] & 0x80000000 == ((s1[i-(N-M)] ^ s1[i]) << 1) & 0x80000000
-            let msb = ((self.state[i - (N - M)] ^ self.state[i]) << 1) & 0x80000000;
-            self.state[i] = msb | (self.state[i] & !0x80000000);
-
-            // (4) Solving for bits 1..=30 of state0[i + 1]:
-            //
-            // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
-            // s1[i] == s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)
-            // s1[i] & 0x3fffffff == (s1[i-(N-M)] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
-            // s1[i] & 0x3fffffff == (s1[i-(N-M)] ^ (s0[i+1] >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
-            // (s0[i+1] >> 1) & 0x3fffffff == (s1[i-(N-M)] ^ s1[i] ^ (lsb * 0x9908b0df)) & 0x3fffffff
-            // s0[i+1] & 0x7ffffffe == ((s1[i-(N-M)] ^ s1[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7ffffffe
-            let mid =
-                ((self.state[i - (N - M)] ^ self.state[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7fffffff;
-            self.state[i + 1] = mid | lsb | (self.state[i + 1] & !0x7fffffff);
-        }
-
-        for i in (0..N - M).rev() {
-            // (5) Solving for bit 0 of state0[i + 1]. This is identical to (2),
-            // except it uses s0[i+M], in place of s1[i-(N-M)].
-            //
-            // s1[i] == s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
-            // s1[i] & 0x80000000 == (s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x80000000
-            // s1[i] & 0x80000000 == (s0[i+M] ^ ((s0[i+1] & 0x1) * 0x9908b0df)) & 0x80000000
-            // s1[i] & 0x80000000 == (s0[i+M] ^ (s0[i+1] << 31)) & 0x80000000
-            // (s0[i+1] << 31) & 0x80000000 == (s0[i+M] ^ s1[i]) & 0x80000000
-            // s0[i+1] & 0x1 == ((s0[i+M] ^ s1[i]) >> 31) & 0x1
-            let lsb = (self.state[i + M] ^ self.state[i]) >> 31;
-
-            let msb = ((self.state[i + M] ^ self.state[i]) << 1) & 0x80000000;
-            self.state[i] = msb | (self.state[i] & !0x80000000);
-
-            // (6) Solving for bits 1..=30 of state0[i + 1]. This is identical
-            // to (4), except it uses s0[i+M], in place of s1[i-(N-M)].
-            //
-            // s1[i] == s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ ((s0[i+1] & 0x1) * 0x9908b0df)
-            // s1[i] == s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)
-            // s1[i] & 0x3fffffff == (s0[i+M] ^ ((s0[i] & 0x80000000) >> 1) ^ ((s0[i+1] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
-            // s1[i] & 0x3fffffff == (s0[i+M] ^ (s0[i+1] >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
-            // (s0[i+1] >> 1) & 0x3fffffff == (s0[i+M] ^ s1[i] ^ (lsb * 0x9908b0df)) & 0x3fffffff
-            // s0[i+1] & 0x7ffffffe == ((s0[i+M] ^ s1[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7ffffffe
-            let mid = ((self.state[i + M] ^ self.state[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7ffffffe;
-            self.state[i + 1] = mid | lsb | (self.state[i + 1] & !0x7fffffff);
+        let state = &mut self.state;
+        for i in (0..N).rev() {
+            let si = state[i];
+            let sj = state[(i + M) % N];
+            let msb = ((si ^ sj) << 1) & 0x80000000;
+            let lsb = (si ^ sj) >> 31;
+            let mid = ((si ^ sj ^ (lsb * 0x9908b0df)) << 1) & 0x7ffffffe;
+            state[i] = msb | (state[i] & 0x7fffffff);
+            state[(i + 1) % N] = mid | lsb | (state[(i + 1) % N] & 0x80000000);
         }
     }
 
