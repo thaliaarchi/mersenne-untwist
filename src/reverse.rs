@@ -33,45 +33,45 @@ impl Random {
     /// }
     /// ```
     ///
-    /// For brevity, let `s` be `state`, `j` be `(i + M) % N`, and `k` be
-    /// `(i + 1) % N`, and strip the `for` loop. We will be rewriting it as an
-    /// equation, so change it to an equality.
+    /// For brevity, we'll leave out the modulo in `state[(i + c) % N]` and
+    /// write `state` as `s`. We will be rewriting the assignment as an
+    /// equation, so change it to an equality:
     ///
     /// ```text
-    /// s[i] == s[j] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[k] & 0x7ffffffe) >> 1) ^ ((s[k] & 0x1) * 0x9908b0df)
+    /// s[i] == s[i+M] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[i+1] & 0x7ffffffe) >> 1) ^ ((s[i+1] & 0x1) * 0x9908b0df)
     /// ```
     ///
     /// ## Solving for bit 0 for `state[1..N]`
     ///
     /// ```text
-    ///                      s[i] == s[j] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[k] & 0x7ffffffe) >> 1) ^ ((s[k] & 0x1) * 0x9908b0df)
-    ///         s[i] & 0x80000000 == (s[j] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[k] & 0x7ffffffe) >> 1) ^ ((s[k] & 0x1) * 0x9908b0df)) & 0x80000000
-    ///         s[i] & 0x80000000 == (s[j] ^ ((s[k] & 0x1) * 0x9908b0df)) & 0x80000000
-    ///         s[i] & 0x80000000 == (s[j] ^ (s[k] << 31)) & 0x80000000
-    /// (s[k] << 31) & 0x80000000 == (s[j] ^ s[i]) & 0x80000000
-    ///                s[k] & 0x1 == (s[j] ^ s[i]) >> 31
+    ///                        s[i] == s[i+M] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[i+1] & 0x7ffffffe) >> 1) ^ ((s[i+1] & 0x1) * 0x9908b0df)
+    ///           s[i] & 0x80000000 == (s[i+M] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[i+1] & 0x7ffffffe) >> 1) ^ ((s[i+1] & 0x1) * 0x9908b0df)) & 0x80000000
+    ///           s[i] & 0x80000000 == (s[i+M] ^ ((s[i+1] & 0x1) * 0x9908b0df)) & 0x80000000
+    ///           s[i] & 0x80000000 == (s[i+M] ^ (s[i+1] << 31)) & 0x80000000
+    /// (s[i+1] << 31) & 0x80000000 == (s[i+M] ^ s[i]) & 0x80000000
+    ///                s[i+1] & 0x1 == (s[i+M] ^ s[i]) >> 31
     /// ```
     ///
     /// Mask with `0x80000000` to cancel `(s[i] & 0x80000000) >> 1` and
-    /// `(s[k] & 0x7ffffffe) >> 1`, which do not have the MSB set.
+    /// `(s[i+1] & 0x7ffffffe) >> 1`, which do not have the MSB set.
     ///
     /// 1. Mask both sides with 0x80000000.
     /// 2. Distribute the mask and cancel expressions with no shared bits.
     /// 3. Simplify the multiply to a shift, as only bit 31 of `0x9908b0df` is
     ///    masked.
-    /// 4. Rearrange the `s[k]` term to the LHS and `s[i]` to the RHS by XORing
+    /// 4. Rearrange the `s[i+1]` term to the LHS and `s[i]` to the RHS by XORing
     ///    both sides.
     /// 5. Move the shift to the RHS.
     ///
     /// ## Solving for bit 31 for `state[1..N]`
     ///
     /// ```text
-    ///                     s[i] == s[j] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[k] & 0x7ffffffe) >> 1) ^ ((s[k] & 0x1) * 0x9908b0df)
-    ///        s[i] & 0x40000000 == (s[j] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[k] & 0x7ffffffe) >> 1) ^ ((s[k] & 0x1) * 0x9908b0df)) & 0x40000000
-    ///        s[i] & 0x40000000 == (s[j] ^ ((s[i] & 0x80000000) >> 1)) & 0x40000000
-    ///        s[i] & 0x40000000 == (s[j] ^ (s[i] >> 1)) & 0x40000000
-    /// (s[i] >> 1) & 0x40000000 == (s[j] ^ s[i]) & 0x40000000
-    ///        s[i] & 0x80000000 == ((s[j] ^ s[i]) << 1) & 0x80000000
+    ///                     s[i] == s[i+M] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[i+1] & 0x7ffffffe) >> 1) ^ ((s[i+1] & 0x1) * 0x9908b0df)
+    ///        s[i] & 0x40000000 == (s[i+M] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[i+1] & 0x7ffffffe) >> 1) ^ ((s[i+1] & 0x1) * 0x9908b0df)) & 0x40000000
+    ///        s[i] & 0x40000000 == (s[i+M] ^ ((s[i] & 0x80000000) >> 1)) & 0x40000000
+    ///        s[i] & 0x40000000 == (s[i+M] ^ (s[i] >> 1)) & 0x40000000
+    /// (s[i] >> 1) & 0x40000000 == (s[i+M] ^ s[i]) & 0x40000000
+    ///        s[i] & 0x80000000 == ((s[i+M] ^ s[i]) << 1) & 0x80000000
     /// ```
     ///
     /// Solving proceeds as above, but with `0x40000000` as the mask.
@@ -79,12 +79,12 @@ impl Random {
     /// ## Solving for bits 1–30 of `state[1..N]`
     ///
     /// ```text
-    ///                     s[i] == s[j] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[k] & 0x7ffffffe) >> 1) ^ ((s[k] & 0x1) * 0x9908b0df)
-    ///                     s[i] == s[j] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[k] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)
-    ///        s[i] & 0x3fffffff == (s[j] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[k] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
-    ///        s[i] & 0x3fffffff == (s[j] ^ (s[k] >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
-    /// (s[k] >> 1) & 0x3fffffff == (s[j] ^ s[i] ^ (lsb * 0x9908b0df)) & 0x3fffffff
-    ///        s[k] & 0x7ffffffe == ((s[j] ^ s[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7ffffffe
+    ///                       s[i] == s[i+M] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[i+1] & 0x7ffffffe) >> 1) ^ ((s[i+1] & 0x1) * 0x9908b0df)
+    ///                       s[i] == s[i+M] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[i+1] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)
+    ///          s[i] & 0x3fffffff == (s[i+M] ^ ((s[i] & 0x80000000) >> 1) ^ ((s[i+1] & 0x7ffffffe) >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
+    ///          s[i] & 0x3fffffff == (s[i+M] ^ (s[i+1] >> 1) ^ (lsb * 0x9908b0df)) & 0x3fffffff
+    /// (s[i+1] >> 1) & 0x3fffffff == (s[i+M] ^ s[i] ^ (lsb * 0x9908b0df)) & 0x3fffffff
+    ///        s[i+1] & 0x7ffffffe == ((s[i+M] ^ s[i] ^ (lsb * 0x9908b0df)) << 1) & 0x7ffffffe
     /// ```
     ///
     /// Mask the remaining bits to cancel `s[i] & 0x80000000) >> 1`.
