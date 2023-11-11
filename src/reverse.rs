@@ -38,17 +38,10 @@ impl Random {
         let key0 = state[N - 1]
             .wrapping_sub(init[N - 1] ^ (state[N - 2] ^ (state[N - 2] >> 30)).wrapping_mul(MULT1));
 
-        // Handle state[1] separately, because it is written to twice and it
-        // uses init[0], not the overwritten state[0].
+        state[0] = init[0];
         state[1] =
             state[1].wrapping_sub(key0) ^ (state[N - 1] ^ (state[N - 1] >> 30)).wrapping_mul(MULT1);
-        let test_key0 =
-            state[1].wrapping_sub(init[1] ^ (init[0] ^ (init[0] >> 30)).wrapping_mul(MULT1));
-        if test_key0 != key0 {
-            return None;
-        }
-
-        for i in (2..N - 1).rev() {
+        for i in (1..N - 1).rev() {
             let test_key0 = state[i]
                 .wrapping_sub(init[i] ^ (state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(MULT1));
             if test_key0 != key0 {
