@@ -15,6 +15,34 @@ impl Random {
         Some(self.state[0])
     }
 
+    pub fn recover_seed_array1(&mut self) -> Option<[u32; 1]> {
+        const MULT1: u32 = 1664525; // TODO: inverses
+        const MULT2: u32 = 1566083941; // TODO: inverses
+
+        let state = &mut self.state;
+        // from_array1 sets state[0] to 0x80000000, but the low bits are
+        // overwritten by twist.
+        if state[0] & 0x80000000 == 0 {
+            return None;
+        }
+        state[1] =
+            state[1].wrapping_add(1).wrapping_mul(MULT2) ^ (state[N - 1] ^ (state[N - 1] >> 30));
+        for i in (2..N).rev() {
+            state[i] = state[i].wrapping_add(i as u32).wrapping_mul(MULT2)
+                ^ (state[i - 1] ^ (state[i - 1] >> 30));
+        }
+
+        let key = [42; 1];
+        state[1] = state[1].wrapping_sub(key[0]).wrapping_mul(MULT1)
+            ^ (state[N - 1] ^ (state[N - 1] >> 30));
+        for i in (1..N).rev() {
+            state[i] = state[i].wrapping_sub(key[0]).wrapping_mul(MULT1)
+                ^ (state[i - 1] ^ (state[i - 1] >> 30));
+        }
+
+        todo!()
+    }
+
     /// Reverses [`Random::twist`]. All bits, except for `state[0] & 0x7fffffff`
     /// can be recovered.
     ///

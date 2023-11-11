@@ -90,7 +90,8 @@ impl Random {
         const MULT1: u32 = 1664525;
         const MULT2: u32 = 1566083941;
 
-        let mut state = Random::from_u32(19650218).state;
+        let mut rand = Random::from_u32(19650218);
+        let state = &mut rand.state;
 
         for i in 1..N {
             state[i] = (state[i] ^ (state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(MULT1))
@@ -107,7 +108,7 @@ impl Random {
             (state[1] ^ (state[N - 1] ^ (state[N - 1] >> 30)).wrapping_mul(MULT2)).wrapping_sub(1);
         state[0] = 0x80000000;
 
-        Random::from_state(state)
+        rand
     }
 
     #[inline]
