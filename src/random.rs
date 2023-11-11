@@ -264,15 +264,6 @@ impl Random {
         let lo = (self.next_u32() >> 6) as f64;
         (hi * 67108864.0 + lo) * (1.0 / 9007199254740992.0)
     }
-
-    pub fn next_befunge(&mut self) -> u8 {
-        let b = (self.next_f64() * 96.0).trunc() as u8;
-        if b < 95 {
-            b + b' '
-        } else {
-            b'\n'
-        }
-    }
 }
 
 /// See [`Random::new`].
@@ -297,47 +288,6 @@ mod tests {
         let mut rand = Random::from_array(&[0x123, 0x234, 0x345, 0x456]);
         let outputs = (0..1000).map(|_| rand.next_u32()).collect::<Vec<_>>();
         assert_eq!(outputs, U32_OUTPUTS);
-    }
-
-    #[test]
-    fn befunge_ranges() {
-        println!("{0} -> {}", befunge_from_u53(0));
-        for target in 0u8..96 {
-            let min = binary_search_range(|x| befunge_from_u53(x) < target);
-            if min != 0 {
-                assert_eq!(befunge_from_u53(min - 1), target - 1);
-            }
-            println!("{min}.. -> {target}");
-        }
-        println!(
-            "{} -> {}",
-            (1u64 << 53) - 1,
-            befunge_from_u53((1 << 53) - 1)
-        );
-    }
-
-    fn befunge_from_u53(x: u64) -> u8 {
-        assert!(x < 1 << 53);
-        let hi = (x >> 26) as f64;
-        let lo = (x & ((1 << 26) - 1)) as f64;
-        let f = (hi * 67108864.0 + lo) * (1.0 / 9007199254740992.0);
-        let c = (f * 96.0).trunc();
-        assert!(0.0 <= c && c < 96.0 && (0..96).contains(&(c as u8)));
-        c as u8
-    }
-
-    fn binary_search_range<F: FnMut(u64) -> bool>(mut less: F) -> u64 {
-        let mut lo = 0u64;
-        let mut hi = (1u64 << 53) - 1;
-        while lo < hi {
-            let mid = lo + (hi - lo) / 2;
-            if less(mid) {
-                lo = mid + 1;
-            } else {
-                hi = mid;
-            }
-        }
-        lo
     }
 
     const U32_OUTPUTS: [u32; 1000] = [

@@ -3,6 +3,7 @@
 //!
 //! It is ported from the 2002 version, [mt19937ar](https://github.com/thaliaarchi/mt19937-archive/tree/mt19937ar-2002).
 
+mod befunge;
 pub mod bitblast;
 pub mod global_z3;
 mod random;
@@ -11,6 +12,7 @@ mod smt;
 pub mod symbolic;
 pub mod symbolic_bits;
 
+pub use befunge::*;
 pub use random::*;
 pub use reverse::*;
 pub use smt::*;
