@@ -11,6 +11,7 @@ mod reverse;
 mod smt;
 pub mod symbolic;
 pub mod symbolic_bits;
+pub mod symbolic_reverse;
 
 pub use befunge::*;
 pub use random::*;
