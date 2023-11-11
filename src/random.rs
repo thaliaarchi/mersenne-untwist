@@ -41,6 +41,11 @@ impl Random {
     /// Constructs a `Random`, initialized by a key array.
     ///
     /// Corresponds to [`init_by_array`](https://github.com/thaliaarchi/mt19937-archive/blob/mt19937ar-2002/mt19937ar.c#L72-L99).
+    ///
+    /// # Panics
+    ///
+    /// Panics when `key` is empty. The reference implementation has a buffer
+    /// overrun in this case.
     pub fn from_array(key: &[u32]) -> Self {
         const MULT1: u32 = 1664525;
         const MULT2: u32 = 1566083941;
@@ -48,7 +53,8 @@ impl Random {
         if key.is_empty() {
             panic!("empty key");
         }
-        let mut state = Random::from_u32(19650218).state;
+        let mut rand = Random::from_u32(19650218);
+        let state = &mut rand.state;
 
         let mut i = 1;
         let mut j = 0;
@@ -79,7 +85,12 @@ impl Random {
 
         state[0] = 0x80000000; // MSB is 1, assuring non-zero initial array
 
-        Random::from_state(state)
+        #[cfg(test)]
+        if key.len() == 1 {
+            assert_eq!(Random::from_array1([key[0]]), rand);
+        }
+
+        rand
     }
 
     /// Constructs a `Random`, initialized by a single-element key array.
@@ -107,6 +118,9 @@ impl Random {
         state[1] =
             (state[1] ^ (state[N - 1] ^ (state[N - 1] >> 30)).wrapping_mul(MULT2)).wrapping_sub(1);
         state[0] = 0x80000000;
+
+        #[cfg(test)]
+        assert_eq!(rand.clone().recover_seed_array1(), Some(key));
 
         rand
     }

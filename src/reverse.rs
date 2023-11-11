@@ -15,32 +15,47 @@ impl Random {
         Some(self.state[0])
     }
 
+    /// Reverses [`Random::from_array1`].
     pub fn recover_seed_array1(&mut self) -> Option<[u32; 1]> {
-        const MULT1: u32 = 1664525; // TODO: inverses
-        const MULT2: u32 = 1566083941; // TODO: inverses
+        const MULT1: u32 = 1664525;
+        const MULT2: u32 = 1566083941;
 
         let state = &mut self.state;
-        // from_array1 sets state[0] to 0x80000000, but the low bits are
-        // overwritten by twist.
+        // `twist` discards the low bits of state[0]. Check that the MSB is set.
         if state[0] & 0x80000000 == 0 {
             return None;
         }
         state[1] =
-            state[1].wrapping_add(1).wrapping_mul(MULT2) ^ (state[N - 1] ^ (state[N - 1] >> 30));
+            state[1].wrapping_add(1) ^ (state[N - 1] ^ (state[N - 1] >> 30)).wrapping_mul(MULT2);
         for i in (2..N).rev() {
-            state[i] = state[i].wrapping_add(i as u32).wrapping_mul(MULT2)
-                ^ (state[i - 1] ^ (state[i - 1] >> 30));
+            state[i] = state[i].wrapping_add(i as u32)
+                ^ (state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(MULT2);
         }
 
-        let key = [42; 1];
-        state[1] = state[1].wrapping_sub(key[0]).wrapping_mul(MULT1)
-            ^ (state[N - 1] ^ (state[N - 1] >> 30));
-        for i in (1..N).rev() {
-            state[i] = state[i].wrapping_sub(key[0]).wrapping_mul(MULT1)
-                ^ (state[i - 1] ^ (state[i - 1] >> 30));
+        let init = Random::from_u32(19650218).state;
+
+        // Start with state[N - 1], where the key is the only unknown.
+        let key0 = state[N - 1]
+            .wrapping_sub(init[N - 1] ^ (state[N - 2] ^ (state[N - 2] >> 30)).wrapping_mul(MULT1));
+
+        // Handle state[1] separately, because it is written to twice and it
+        // uses init[0], not the overwritten state[0].
+        state[1] =
+            state[1].wrapping_sub(key0) ^ (state[N - 1] ^ (state[N - 1] >> 30)).wrapping_mul(MULT1);
+        let test_key0 =
+            state[1].wrapping_sub(init[1] ^ (init[0] ^ (init[0] >> 30)).wrapping_mul(MULT1));
+        if test_key0 != key0 {
+            return None;
         }
 
-        todo!()
+        for i in (2..N - 1).rev() {
+            let test_key0 = state[i]
+                .wrapping_sub(init[i] ^ (state[i - 1] ^ (state[i - 1] >> 30)).wrapping_mul(MULT1));
+            if test_key0 != key0 {
+                return None;
+            }
+        }
+        Some([key0])
     }
 
     /// Reverses [`Random::twist`]. All bits, except for `state[0] & 0x7fffffff`
