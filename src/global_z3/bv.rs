@@ -30,7 +30,7 @@ impl<const N: usize> BV<N> {
     #[inline]
     pub fn new(name: &CStr) -> Self {
         let ctx = ctx();
-        Self::wrap(ctx, mk_bv_var(ctx, name))
+        Self::wrap(ctx, mk_bv_var(ctx, name, N))
     }
 
     #[inline]
@@ -39,7 +39,7 @@ impl<const N: usize> BV<N> {
             None
         } else {
             let ctx = ctx();
-            Some(Self::wrap(ctx, mk_bv_lit(ctx, n)))
+            Some(Self::wrap(ctx, mk_bv_lit(ctx, n, N)))
         }
     }
 
@@ -149,9 +149,9 @@ impl BV<64> {
 
 /// Unwrapped version of [`z3::ast::BV::new_const`] with a string symbol.
 #[inline]
-fn mk_bv_var(ctx: Z3_context, name: &CStr) -> Z3_ast {
+fn mk_bv_var(ctx: Z3_context, name: &CStr, size: usize) -> Z3_ast {
     unsafe {
-        let sort = Z3_mk_bv_sort(ctx, 32);
+        let sort = Z3_mk_bv_sort(ctx, size as _);
         let sym = Z3_mk_string_symbol(ctx, name.as_ptr());
         Z3_mk_const(ctx, sym, sort)
     }
@@ -159,9 +159,9 @@ fn mk_bv_var(ctx: Z3_context, name: &CStr) -> Z3_ast {
 
 /// Unwrapped version of [`z3::ast::BV::from_u64`].
 #[inline]
-fn mk_bv_lit<T: Into<u64>>(ctx: Z3_context, n: T) -> Z3_ast {
+fn mk_bv_lit<T: Into<u64>>(ctx: Z3_context, n: T, size: usize) -> Z3_ast {
     unsafe {
-        let sort = Z3_mk_bv_sort(ctx, 32);
+        let sort = Z3_mk_bv_sort(ctx, size as _);
         Z3_mk_unsigned_int64(ctx, n.into(), sort)
     }
 }
@@ -179,7 +179,7 @@ impl From<u8> for BV<8> {
     #[inline]
     fn from(n: u8) -> Self {
         let ctx = ctx();
-        Self::wrap(ctx, mk_bv_lit(ctx, n))
+        Self::wrap(ctx, mk_bv_lit(ctx, n, 8))
     }
 }
 
@@ -187,7 +187,7 @@ impl From<u16> for BV<16> {
     #[inline]
     fn from(n: u16) -> Self {
         let ctx = ctx();
-        Self::wrap(ctx, mk_bv_lit(ctx, n))
+        Self::wrap(ctx, mk_bv_lit(ctx, n, 16))
     }
 }
 
@@ -195,7 +195,7 @@ impl From<u32> for BV<32> {
     #[inline]
     fn from(n: u32) -> Self {
         let ctx = ctx();
-        Self::wrap(ctx, mk_bv_lit(ctx, n))
+        Self::wrap(ctx, mk_bv_lit(ctx, n, 32))
     }
 }
 
@@ -203,7 +203,7 @@ impl From<u64> for BV<64> {
     #[inline]
     fn from(n: u64) -> Self {
         let ctx = ctx();
-        Self::wrap(ctx, mk_bv_lit(ctx, n))
+        Self::wrap(ctx, mk_bv_lit(ctx, n, 64))
     }
 }
 
@@ -255,7 +255,7 @@ macro_rules! impl_binop_const_rhs(($Op:ident, $lhs_ref:ident, [$($N:literal / $R
         #[inline]
         fn $op(self, rhs: $Rhs) -> Self::Output {
             let ctx = ctx();
-            unsafe { BV::wrap(ctx, $func(ctx, self.ast, mk_bv_lit(ctx, rhs))) }
+            unsafe { BV::wrap(ctx, $func(ctx, self.ast, mk_bv_lit(ctx, rhs, $N))) }
         }
     })+
 });
@@ -266,7 +266,7 @@ macro_rules! impl_binop_const_lhs(($Op:ident, [$($N:literal / $Lhs:ty),+], $rhs_
         #[inline]
         fn $op(self, rhs: ref_ty!($rhs_ref BV<$N>)) -> Self::Output {
             let ctx = ctx();
-            unsafe { BV::wrap(ctx, $func(ctx, mk_bv_lit(ctx, self), rhs.ast)) }
+            unsafe { BV::wrap(ctx, $func(ctx, mk_bv_lit(ctx, self, $N), rhs.ast)) }
         }
     })+
 });
@@ -277,7 +277,7 @@ macro_rules! impl_binop_usize_rhs(($Op:ident, $lhs_ref:ident, $op:ident, $func:i
         #[inline]
         fn $op(self, rhs: usize) -> Self::Output {
             let ctx = ctx();
-            unsafe { BV::wrap(ctx, $func(ctx, self.ast, mk_bv_lit(ctx, rhs as u64))) }
+            unsafe { BV::wrap(ctx, $func(ctx, self.ast, mk_bv_lit(ctx, rhs as u64, N))) }
         }
     }
 });
@@ -295,7 +295,7 @@ macro_rules! impl_binop_assign_const_rhs(($OpAssign:ident, [$($N:literal / $Rhs:
         #[inline]
         fn $op_assign(&mut self, rhs: $Rhs) {
             let ctx = ctx();
-            *self = unsafe { BV::wrap(ctx, $func(ctx, self.ast, mk_bv_lit(ctx, rhs))) };
+            *self = unsafe { BV::wrap(ctx, $func(ctx, self.ast, mk_bv_lit(ctx, rhs, $N))) };
         }
     })+
 });
@@ -304,7 +304,7 @@ macro_rules! impl_binop_assign_usize_rhs(($OpAssign:ident, $op_assign:ident, $fu
         #[inline]
         fn $op_assign(&mut self, rhs: usize) {
             let ctx = ctx();
-            *self = unsafe { BV::wrap(ctx, $func(ctx, self.ast, mk_bv_lit(ctx, rhs as u64))) };
+            *self = unsafe { BV::wrap(ctx, $func(ctx, self.ast, mk_bv_lit(ctx, rhs as u64, N))) };
         }
     }
 });
