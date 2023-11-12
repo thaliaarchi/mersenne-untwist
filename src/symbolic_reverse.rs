@@ -27,7 +27,7 @@ impl Random {
         let seed = reverse.recover_seed_array1(&mut solver);
         Random {
             forward: state,
-            index: N,
+            index: 0,
             seed,
             solver,
         }
@@ -85,8 +85,9 @@ impl State {
         let init = crate::Random::from_u32(19650218).state;
 
         // Start with state[N - 1], where the key is the only unknown.
-        let key0 =
-            &state[N - 1] - (init[N - 1] ^ ((&state[N - 2] ^ (&state[N - 2] >> 30)) * &mult1));
+        let key0 = (&state[N - 1]
+            - (init[N - 1] ^ ((&state[N - 2] ^ (&state[N - 2] >> 30)) * &mult1)))
+            .simplify();
 
         state[0] = U32::from(init[0]);
         state[1] = (&state[1] - &key0) ^ ((&state[N - 1] ^ (&state[N - 1] >> 30)) * &mult1);
@@ -101,10 +102,11 @@ impl State {
     pub fn twist(&mut self) {
         let state = &mut *self.values;
         for i in 0..N {
-            state[i] = &state[(i + M) % N]
+            state[i] = (&state[(i + M) % N]
                 ^ ((&state[i] & 0x80000000) >> 1)
                 ^ ((&state[(i + 1) % N] & 0x7ffffffe) >> 1)
-                ^ ((&state[(i + 1) % N] & 0x1) * 0x9908b0df);
+                ^ ((&state[(i + 1) % N] & 0x1) * 0x9908b0df))
+                .simplify();
         }
     }
 
@@ -132,6 +134,30 @@ impl State {
         x ^= (&x << 7) & 0x90000000;
         x ^= &x >> 11;
         x ^= &x >> 22;
-        x
+        x.simplify()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::global_z3::SatResult;
+
+    use super::*;
+
+    #[test]
+    fn abstract_matches_concrete() {
+        let seed = 123;
+        let len = N - 5;
+        let mut forward_rand = crate::Random::from_array1([seed]);
+        let mut sym_rand = Random::new();
+        for _ in 0..len {
+            let v = crate::Random::untemper(forward_rand.next_u32());
+            let eq = &sym_rand.next_u32().equals(&U32::from(v));
+            sym_rand.solver().assert(eq);
+        }
+        assert_eq!(sym_rand.solver().check(), SatResult::Sat);
+        let model = sym_rand.solver().get_model().unwrap();
+        let seed_eval = sym_rand.seed()[0].eval(&model, true).unwrap();
+        assert_eq!(seed_eval.as_const().unwrap(), seed);
     }
 }

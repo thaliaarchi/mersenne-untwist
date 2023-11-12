@@ -147,18 +147,19 @@ mod tests {
     #[test]
     #[ignore = "too slow"]
     fn solve_seed() {
-        let seed = U32::new(CStr::from_bytes_with_nul(b"seed\0").unwrap());
-        println!("Starting Z3Random::from_u32");
-        let mut z3rand = Z3Random::from_u32(&seed);
-        println!("Starting Z3Random::next_u32");
-        let x = z3rand.next_u32();
+        let seed = 123;
+        let mut rand = Random::from_u32(seed);
+
+        let seed_var = U32::new(CStr::from_bytes_with_nul(b"seed\0").unwrap());
+        let mut z3rand = Z3Random::from_u32(&seed_var);
         let solver = Solver::new();
-        solver.assert(&x.equals(&U32::from(0xb24bcdfe)));
-        println!("Starting Solver::check");
+        for _ in 0..N {
+            let v = z3rand.next_u32();
+            solver.assert(&v.equals(&U32::from(rand.next_u32())));
+        }
         assert_eq!(solver.check(), SatResult::Sat);
         let model = solver.get_model().unwrap();
-        println!("Starting U32::eval");
-        let seed_const = seed.eval(&model, true).unwrap().as_const().unwrap();
+        let seed_const = seed_var.eval(&model, true).unwrap().as_const().unwrap();
         assert_eq!(seed_const, 123);
     }
 
