@@ -1,4 +1,9 @@
-use crate::Random;
+use thiserror::Error;
+
+use crate::{
+    global_z3::{Bool, BV},
+    Random,
+};
 
 impl Random {
     pub fn next_ascii96(&mut self) -> u8 {
@@ -11,7 +16,38 @@ impl Random {
     }
 }
 
-#[cfg(test)]
+impl crate::symbolic_reverse::Random {
+    pub fn next_ascii96(&mut self) -> Ascii96 {
+        let hi = (self.next_u32() >> 5).cast::<53>();
+        let lo = (self.next_u32() >> 6).cast::<53>();
+        Ascii96 {
+            value: (hi << 26) | lo,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Ascii96 {
+    value: BV<53>,
+}
+
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+#[error("invalid ASCII-96 character (not an ASCII character in ' '..='~' or '\\n')")]
+pub struct Ascii96Error;
+
+impl Ascii96 {
+    pub fn equals(&self, b: u8) -> Result<Bool, Ascii96Error> {
+        if (b' '..=b'~').contains(&b) || b == b'\n' {
+            let i = if b == b'\n' { 95 } else { b - b' ' } as usize;
+            let min = BV::<53>::from_u64(ASCII96_RANGES[i]).unwrap();
+            let max = BV::<53>::from_u64(ASCII96_RANGES[i + 1] - 1).unwrap();
+            Ok(min.le(&self.value) & self.value.le(&max))
+        } else {
+            Err(Ascii96Error)
+        }
+    }
+}
+
 const ASCII96_RANGES: [u64; 97] = [
     0x00000000000000,
     0x00555555555556,
