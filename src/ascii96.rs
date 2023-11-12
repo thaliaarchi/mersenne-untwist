@@ -1,7 +1,7 @@
 use crate::Random;
 
 impl Random {
-    pub fn next_befunge(&mut self) -> u8 {
+    pub fn next_ascii96(&mut self) -> u8 {
         let b = (self.next_f64() * 96.0).trunc() as u8;
         if b < 95 {
             b + b' '
@@ -12,7 +12,7 @@ impl Random {
 }
 
 #[cfg(test)]
-const BEFUNGE_RANGES: [u64; 97] = [
+const ASCII96_RANGES: [u64; 97] = [
     0x00000000000000,
     0x00555555555556,
     0x00aaaaaaaaaaab,
@@ -117,31 +117,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn verify_befunge_ranges() {
+    fn verify_ascii96_ranges() {
         for i in 0..96 {
-            assert_eq!(befunge_from_u53(BEFUNGE_RANGES[i]), i as u8);
-            assert_eq!(befunge_from_u53(BEFUNGE_RANGES[i + 1] - 1), i as u8);
+            assert_eq!(ascii96_from_u53(ASCII96_RANGES[i]), i as u8);
+            assert_eq!(ascii96_from_u53(ASCII96_RANGES[i + 1] - 1), i as u8);
         }
     }
 
     #[test]
-    fn search_befunge_ranges() {
-        println!("0 -> {}", befunge_from_u53(0));
+    fn search_ascii96_ranges() {
+        println!("0 -> {}", ascii96_from_u53(0));
         for target in 0u8..96 {
-            let min = binary_search_range(|x| befunge_from_u53(x) < target);
+            let min = binary_search_range(|x| ascii96_from_u53(x) < target);
             if min != 0 {
-                assert_eq!(befunge_from_u53(min - 1), target - 1);
+                assert_eq!(ascii96_from_u53(min - 1), target - 1);
             }
             println!("{min:#x}.. -> {target}");
         }
         println!(
             "{:#x} -> {}",
             (1u64 << 53) - 1,
-            befunge_from_u53((1 << 53) - 1)
+            ascii96_from_u53((1 << 53) - 1)
         );
     }
 
-    fn befunge_from_u53(x: u64) -> u8 {
+    fn ascii96_from_u53(x: u64) -> u8 {
         assert!(x < 1 << 53);
         let hi = (x >> 26) as f64;
         let lo = (x & ((1 << 26) - 1)) as f64;
@@ -153,7 +153,7 @@ mod tests {
 
     fn binary_search_range<F: FnMut(u64) -> bool>(mut less: F) -> u64 {
         let mut lo = 0u64;
-        let mut hi = (1u64 << 53) - 1;
+        let mut hi = 1u64 << 53;
         while lo < hi {
             let mid = lo + (hi - lo) / 2;
             if less(mid) {
