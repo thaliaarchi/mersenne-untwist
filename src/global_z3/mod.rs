@@ -4,14 +4,14 @@ use std::fmt::{self, Formatter};
 use z3_sys::{Z3_context, Z3_mk_config, Z3_mk_context_rc, Z3_set_error_handler};
 
 pub use bool::*;
+pub use bv::*;
 pub use model::*;
 pub use solver::*;
-pub use u32::*;
 
 mod bool;
+mod bv;
 mod model;
 mod solver;
-mod u32;
 
 thread_local! {
     static CTX: Z3_context = init_ctx();
