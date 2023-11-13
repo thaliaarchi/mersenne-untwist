@@ -9,8 +9,8 @@ use z3_sys::{
     Z3_ast, Z3_ast_to_string, Z3_context, Z3_dec_ref, Z3_get_numeral_uint64, Z3_inc_ref,
     Z3_mk_bv_sort, Z3_mk_bvadd, Z3_mk_bvand, Z3_mk_bvlshr, Z3_mk_bvmul, Z3_mk_bvneg, Z3_mk_bvnot,
     Z3_mk_bvor, Z3_mk_bvshl, Z3_mk_bvsub, Z3_mk_bvudiv, Z3_mk_bvuge, Z3_mk_bvugt, Z3_mk_bvule,
-    Z3_mk_bvult, Z3_mk_bvurem, Z3_mk_bvxor, Z3_mk_const, Z3_mk_eq, Z3_mk_ite, Z3_mk_string_symbol,
-    Z3_mk_unsigned_int64, Z3_model_eval, Z3_simplify,
+    Z3_mk_bvult, Z3_mk_bvurem, Z3_mk_bvxor, Z3_mk_concat, Z3_mk_const, Z3_mk_eq, Z3_mk_extract,
+    Z3_mk_ite, Z3_mk_string_symbol, Z3_mk_unsigned_int64, Z3_model_eval, Z3_simplify,
 };
 
 use crate::global_z3::{ctx, Bool, Model, Z3_fmt};
@@ -105,17 +105,17 @@ impl<const N: usize> BV<N> {
 
     #[inline]
     pub fn cast<const M: usize>(self) -> BV<M> {
-        if M > 64 {
-            panic!("size above 64 not supported");
-        }
-        let ast = if M < N {
-            let mut bv = BV::<64> { ast: self.ast };
-            bv &= (1u64 << M) - 1;
-            bv.ast
-        } else {
-            self.ast
+        let ctx = ctx();
+        let ast = unsafe {
+            if M < N {
+                Z3_mk_extract(ctx, M as u32, 0, self.ast)
+            } else if M > N {
+                Z3_mk_concat(ctx, mk_bv_lit(ctx, 0u64, M - N), self.ast)
+            } else {
+                return BV { ast: self.ast };
+            }
         };
-        BV { ast }
+        BV::wrap(ctx, ast)
     }
 }
 
