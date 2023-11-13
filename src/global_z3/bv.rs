@@ -104,7 +104,7 @@ impl<const N: usize> BV<N> {
     }
 
     #[inline]
-    pub fn cast<const M: usize>(self) -> BV<M> {
+    pub fn cast<const M: usize>(&self) -> BV<M> {
         let ctx = ctx();
         let ast = unsafe {
             if M < N {
@@ -116,6 +116,13 @@ impl<const N: usize> BV<N> {
             }
         };
         BV::wrap(ctx, ast)
+    }
+
+    #[inline]
+    pub fn concat<const M: usize, const NM: usize>(&self, rhs: &BV<M>) -> BV<NM> {
+        assert_eq!(N + M, NM, "sum of the sizes");
+        let ctx = ctx();
+        BV::wrap(ctx, unsafe { Z3_mk_concat(ctx, self.ast, rhs.ast) })
     }
 }
 
