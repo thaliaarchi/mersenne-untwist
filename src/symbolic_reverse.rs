@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn abstract_matches_concrete() {
         let seed = 123;
-        let len = N - 5;
+        let len = N;
         let mut forward_rand = crate::Random::from_array1([seed]);
         let mut sym_rand = Random::new();
         for _ in 0..len {
@@ -159,5 +159,20 @@ mod tests {
         let model = sym_rand.solver().get_model().unwrap();
         let seed_eval = sym_rand.seed()[0].eval(&model, true).unwrap();
         assert_eq!(seed_eval.as_const().unwrap(), seed);
+    }
+
+    #[test]
+    fn solve_ascii96_2() {
+        let text = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+        let mut rand = Random::new();
+        for &b in text.as_bytes() {
+            let bound = rand.next_ascii96().equals(b).unwrap().simplify();
+            rand.solver().assert(&bound);
+        }
+        println!("{}", rand.solver);
+        // assert_eq!(rand.solver().check(), SatResult::Sat);
+        // let model = rand.solver().get_model().unwrap();
+        // let seed = rand.seed()[0].eval(&model, true).unwrap();
+        // println!("Seed found! key=[0x{:08x}]", seed.as_const().unwrap());
     }
 }

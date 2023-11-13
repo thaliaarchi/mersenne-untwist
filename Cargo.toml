@@ -1,10 +1,10 @@
 [package]
-name = "mt19937-rust"
+name = "mersenne-untwist"
 version = "0.1.0"
 authors = ["Thalia Archibald"]
 edition = "2021"
-description = "MT19937 Mersenne Twister pseudorandom number generator"
-repository = "https://github.com/thaliaarchi/mt19937-rust"
+description = "Reverse implementation of the MT19937 Mersenne Twister pseudorandom number generator"
+repository = "https://github.com/thaliaarchi/mersenne-untwist"
 license = "BSD-3-Clause"
 keywords = ["mt19937", "mersenne-twister", "prng"]
 categories = ["algorithms"]
